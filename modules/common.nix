@@ -180,6 +180,17 @@ in
       description = "Agent-specific sync destinations.";
     };
 
+    excludePatterns = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = agentLib.defaultExcludePatterns;
+      description = ''
+        Patterns to exclude from rsync synchronization.
+        Default excludes ".system" to allow agents (Codex, etc.) to manage their own system skills.
+        Set to [] for full declarative control over the skills directory.
+      '';
+      example = [ ".system" ".cache" ];
+    };
+
     catalog = lib.mkOption {
       type = lib.types.attrs;
       description = "Discovered skills catalog.";

@@ -336,10 +336,15 @@ SKILL_EOF
     opencode = { dest = ".opencode/skills"; structure = "copy-tree"; enable = true; systems = []; };
   };
 
+  # Default exclude patterns for rsync synchronization.
+  # Excludes "/.system" (root-level only) to allow agents (Codex, etc.) to manage their own system skills.
+  # The leading "/" ensures only the top-level .system is excluded, not .system dirs inside skills.
+  defaultExcludePatterns = [ "/.system" ];
+
   # Create a local install script for use in consumer flakes.
   # This allows projects to install skills to their local directory.
   # Respects target enable/system filters and structure (link/symlink-tree/copy-tree).
-  mkLocalInstallScript = { pkgs, bundle, targets ? defaultLocalTargets }:
+  mkLocalInstallScript = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
     let
       activeTargets = targetsFor { inherit targets; system = pkgs.system; };
       targetsList = lib.mapAttrsToList (name: t:
@@ -350,6 +355,7 @@ SKILL_EOF
           ''"${name}|${structure}|${dest}"''
       ) activeTargets;
       targetsArray = lib.concatStringsSep "\n  " targetsList;
+      excludeFlags = concatMapStringsSep " " (p: "--exclude='${p}'") excludePatterns;
     in
     pkgs.writeShellApplication {
       name = "skills-install-local";
@@ -418,14 +424,18 @@ SKILL_EOF
                 rm -rf "$full_dest"
               fi
               mkdir -p "$full_dest"
-              ${pkgs.rsync}/bin/rsync -a --delete "$bundle/" "$full_dest/"
+              ${pkgs.rsync}/bin/rsync -a --delete ${excludeFlags} "$bundle/" "$full_dest/"
+              # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+              chmod u+w "$full_dest"
               ;;
             copy-tree)
               if [ -L "$full_dest" ]; then
                 rm -rf "$full_dest"
               fi
               mkdir -p "$full_dest"
-              ${pkgs.rsync}/bin/rsync -aL --delete "$bundle/" "$full_dest/"
+              ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$full_dest/"
+              # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+              chmod u+w "$full_dest"
               ;;
             *)
               echo "agent-skills: unknown structure '$structure' for target '$name'" >&2
@@ -456,7 +466,9 @@ SKILL_EOF
               rm -rf "$full_dest"
             fi
             mkdir -p "$full_dest"
-            ${pkgs.rsync}/bin/rsync -aL --delete "$bundle/" "$full_dest/"
+            ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$full_dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$full_dest"
             echo "agent-skills: installed to $full_dest"
           done
         fi
@@ -474,6 +486,7 @@ SKILL_EOF
     allowOverrides ? false,
     overrideEnvVar ? "AGENT_SKILLS_DESTS",
     overrideStructure ? "symlink-tree",
+    excludePatterns ? defaultExcludePatterns,
   }:
     let
       activeTargets = targetsFor { inherit targets system; };
@@ -485,6 +498,7 @@ SKILL_EOF
           ''"${name}|${structure}|${dest}"''
       ) activeTargets;
       targetsArray = lib.concatStringsSep "\n  " targetsList;
+      excludeFlags = concatMapStringsSep " " (p: "--exclude='${p}'") excludePatterns;
       overrideVar = "\${" + overrideEnvVar + ":-}";
       overrideSnippet = if allowOverrides then ''
         if [ -n "${overrideVar}" ]; then
@@ -515,11 +529,15 @@ SKILL_EOF
             ;;
           symlink-tree)
             mkdir -p "$dest"
-            ${pkgs.rsync}/bin/rsync -a --delete "$bundle/" "$dest/"
+            ${pkgs.rsync}/bin/rsync -a --delete ${excludeFlags} "$bundle/" "$dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$dest"
             ;;
           copy-tree)
             mkdir -p "$dest"
-            ${pkgs.rsync}/bin/rsync -aL --delete "$bundle/" "$dest/"
+            ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$dest"
             ;;
           *)
             echo "agent-skills: unknown structure '$structure' for target '$name'" >&2
@@ -543,9 +561,9 @@ SKILL_EOF
 
   # Create a shellHook string for use in devShells.
   # Automatically installs skills when entering the dev shell.
-  mkShellHook = { pkgs, bundle, targets ? defaultLocalTargets }:
+  mkShellHook = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
     let
-      installScript = mkLocalInstallScript { inherit pkgs bundle targets; };
+      installScript = mkLocalInstallScript { inherit pkgs bundle targets excludePatterns; };
     in ''
       ${installScript}/bin/skills-install-local
     '';
@@ -565,4 +583,5 @@ in
   mkShellHook = mkShellHook;
   defaultTargets = defaultTargets;
   defaultLocalTargets = defaultLocalTargets;
+  defaultExcludePatterns = defaultExcludePatterns;
 }

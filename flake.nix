@@ -39,6 +39,7 @@
           explicit = {};
         };
         targets = defaultTargets;
+        excludePatterns = agentLib.defaultExcludePatterns;
       };
 
       defaultCatalog = agentLib.discoverCatalog defaultConfig.sources;

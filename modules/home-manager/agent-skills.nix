@@ -21,6 +21,7 @@ let
     inherit pkgs bundle;
     targets = syncTargets;
     system = pkgs.system;
+    excludePatterns = cfg.excludePatterns;
   };
 in
 {
