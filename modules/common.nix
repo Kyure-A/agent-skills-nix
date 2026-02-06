@@ -28,28 +28,11 @@ let
           else throw "agent-skills: target '${name}' requires a 'dest' option";
         description = ''
           Destination path for skills. Supports shell variable expansion at runtime.
+          See README.md#default-target-paths for the full default path matrix.
           Examples:
-            - ".agents/skills" (agentskills.io standard for Codex, etc.)
-            - "''${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" (Claude Code with env var)
-            - "$HOME/.agents/skills" (global agentskills.io standard)
-            - ".github/skills" (GitHub Copilot repository skills)
-            - "$HOME/.copilot/skills" (GitHub Copilot global skills)
-            - ".cursor/skills" (Cursor project-level skills)
-            - "$HOME/.cursor/skills" (Cursor user-level/global skills)
-            - ".windsurf/skills" (Windsurf workspace skills)
-            - "$HOME/.codeium/windsurf/skills" (Windsurf global skills)
-            - ".agent/skills" (Antigravity workspace skills)
-            - "$HOME/.gemini/antigravity/skills" (Antigravity global skills)
-            - ".gemini/skills" (Gemini CLI workspace skills)
-            - "$HOME/.gemini/skills" (Gemini CLI global skills)
-          References:
-            - Agent Skills standard: https://agentskills.io
-            - Claude Code: https://docs.claude.com/en/docs/claude-code/skills
-            - GitHub Copilot: https://docs.github.com/en/copilot/concepts/agents/about-agent-skills
-            - Cursor: https://cursor.com/docs/context/skills
-            - Windsurf: https://docs.windsurf.com/windsurf/cascade/skills
-            - Gemini CLI: https://geminicli.com/docs/cli/skills/
-            - Antigravity (path matrix): https://agentskillsrepo.com/docs
+            - "$HOME/.agents/skills" (global)
+            - ".agents/skills" (project-local)
+            - "''${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" (env-expanded)
           Note: 'link' structure type does not support shell variable expansion;
           use 'symlink-tree' or 'copy-tree' for dynamic paths.
         '';
