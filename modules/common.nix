@@ -32,6 +32,8 @@ let
             - ".agents/skills" (agentskills.io standard for Codex, etc.)
             - "''${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" (Claude Code with env var)
             - "$HOME/.agents/skills" (global agentskills.io standard)
+            - ".github/skills" (GitHub Copilot repository skills)
+            - "$HOME/.copilot/skills" (GitHub Copilot global skills)
           Note: 'link' structure type does not support shell variable expansion;
           use 'symlink-tree' or 'copy-tree' for dynamic paths.
         '';

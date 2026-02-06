@@ -307,6 +307,7 @@ SKILL_EOF
   # Default global targets for user-level installation.
   # Respects CLAUDE_CONFIG_DIR environment variable for Claude Code.
   # Uses .agents/skills for agentskills.io standard (Codex, etc.).
+  # Supports GitHub Copilot via ~/.copilot/skills.
   defaultTargets = {
     agents = {
       dest = "$HOME/.agents/skills";
@@ -320,6 +321,12 @@ SKILL_EOF
       enable = true;
       systems = [];
     };
+    copilot = {
+      dest = "$HOME/.copilot/skills";
+      structure = "symlink-tree";
+      enable = true;
+      systems = [];
+    };
   };
 
   # Default local targets for project-local skill installation.
@@ -327,6 +334,7 @@ SKILL_EOF
   defaultLocalTargets = {
     agents = { dest = ".agents/skills"; structure = "copy-tree"; enable = true; systems = []; };
     claude = { dest = ".claude/skills"; structure = "copy-tree"; enable = true; systems = []; };
+    copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = true; systems = []; };
   };
 
   # Default exclude patterns for rsync synchronization.
