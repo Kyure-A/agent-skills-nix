@@ -2,7 +2,7 @@
 
 let
   agentLibFor = inputsFromArgs:
-    import ../lib/agent-skills.nix {
+    import ../lib {
       inherit lib;
       inputs = inputs // inputsFromArgs;
     };

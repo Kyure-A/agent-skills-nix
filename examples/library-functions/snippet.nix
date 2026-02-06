@@ -1,5 +1,5 @@
 let
-  lib = (import ./lib/agent-skills.nix { inherit inputs; lib = nixpkgs.lib; });
+  lib = (import ./lib { inherit inputs; lib = nixpkgs.lib; });
   catalog = lib.discoverCatalog sources;
   selection = lib.selectSkills {
     inherit catalog sources;

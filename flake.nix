@@ -11,8 +11,6 @@
 
   outputs = inputs@{ self, nixpkgs, home-manager, ... }:
     let
-      lib = nixpkgs.lib;
-
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -20,14 +18,17 @@
         "aarch64-darwin"
       ];
 
-      forAllSystems = lib.genAttrs systems;
-      agentLib = import ./lib/agent-skills.nix { inherit lib inputs; };
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      lib = import ./lib {
+        lib = nixpkgs.lib;
+        inherit inputs;
+      };
 
-      # Default global targets are defined in lib/agent-skills.nix; see README.md#default-target-paths.
-      defaultTargets = agentLib.defaultTargets;
+      # Default global targets are defined in lib/default.nix; see README.md#default-target-paths.
+      defaultTargets = lib.defaultTargets;
 
-      # Default local targets are defined in lib/agent-skills.nix; see README.md#default-target-paths.
-      defaultLocalTargets = agentLib.defaultLocalTargets;
+      # Default local targets are defined in lib/default.nix; see README.md#default-target-paths.
+      defaultLocalTargets = lib.defaultLocalTargets;
 
       defaultConfig = {
         # Add sources and skills (enable/explicit) in your consumer flake; kept empty here to stay neutral.
@@ -38,17 +39,17 @@
           explicit = {};
         };
         targets = defaultTargets;
-        excludePatterns = agentLib.defaultExcludePatterns;
+        excludePatterns = lib.defaultExcludePatterns;
       };
 
-      defaultCatalog = agentLib.discoverCatalog defaultConfig.sources;
-      defaultAllowlist = agentLib.allowlistFor {
+      defaultCatalog = lib.discoverCatalog defaultConfig.sources;
+      defaultAllowlist = lib.allowlistFor {
         catalog = defaultCatalog;
         sources = defaultConfig.sources;
         enableAll = defaultConfig.skills.enableAll;
         enable = defaultConfig.skills.enable;
       };
-      defaultSelection = agentLib.selectSkills {
+      defaultSelection = lib.selectSkills {
         catalog = defaultCatalog;
         allowlist = defaultAllowlist;
         skills = defaultConfig.skills.explicit;
@@ -57,7 +58,7 @@
 
       bundleFor = system:
         let pkgs = nixpkgs.legacyPackages.${system}; in
-        agentLib.mkBundle { inherit pkgs; selection = defaultSelection; name = "agent-skills-bundle"; };
+        lib.mkBundle { inherit pkgs; selection = defaultSelection; name = "agent-skills-bundle"; };
     in
     {
       formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixpkgs-fmt);
@@ -73,12 +74,12 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           bundle = bundleFor system;
-          listJson = pkgs.writeText "agent-skills-catalog.json" (builtins.toJSON (agentLib.catalogJson defaultCatalog));
+          listJson = pkgs.writeText "agent-skills-catalog.json" (builtins.toJSON (lib.catalogJson defaultCatalog));
 
           installScript = pkgs.writeShellApplication {
             name = "skills-install";
             runtimeInputs = [ pkgs.rsync pkgs.coreutils ];
-            text = agentLib.mkSyncScript {
+            text = lib.mkSyncScript {
               inherit pkgs bundle;
               targets = defaultTargets;
               system = pkgs.system;
@@ -94,7 +95,7 @@
             '';
           };
 
-          installLocalScript = agentLib.mkLocalInstallScript {
+          installLocalScript = lib.mkLocalInstallScript {
             inherit pkgs bundle;
             targets = defaultLocalTargets;
           };
@@ -124,17 +125,22 @@
             touch "$out/ok"
           '';
           transform-packages = import ./test/transform-packages.nix {
-            inherit pkgs agentLib;
+            inherit pkgs;
+            agentLib = lib;
           };
           targets = import ./test/targets.nix {
-            inherit pkgs agentLib;
+            inherit pkgs;
+            agentLib = lib;
           };
         });
 
       homeManagerModules.default =
-        import ./modules/home-manager/agent-skills.nix { inherit inputs lib; };
+        import ./modules/home-manager/agent-skills.nix {
+          inherit inputs;
+          lib = nixpkgs.lib;
+        };
 
-      lib.agent-skills = agentLib // { defaultConfig = defaultConfig; };
-      catalog = agentLib.catalogJson defaultCatalog;
+      lib.agent-skills = lib // { defaultConfig = defaultConfig; };
+      catalog = lib.catalogJson defaultCatalog;
     };
 }
