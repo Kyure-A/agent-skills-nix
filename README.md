@@ -7,7 +7,7 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 - **sources**: Named inputs (flake or path) pointing at a skills root (`subdir`).
 - **discover**: Scans sources for directories that contain `SKILL.md`, producing a catalog.
 - **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
-- **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). The `dest` option supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). Default targets include `.agents/skills` (agentskills.io standard), `.claude/skills` (Claude Code), and GitHub Copilot skills paths (`~/.copilot/skills`, `.github/skills`).
+- **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). The `dest` option supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). Default targets include `.agents/skills` (agentskills.io standard), `.claude/skills` (Claude Code), GitHub Copilot skills paths (`~/.copilot/skills`, `.github/skills`), and Gemini paths for Antigravity/Gemini CLI.
 
 ## Quick start (child flake + Home Manager)
 
@@ -63,6 +63,8 @@ Then load it from your main Home Manager config:
     #   - agents: $HOME/.agents/skills (agentskills.io standard for Codex, etc.)
     #   - claude: ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills (Claude Code)
     #   - copilot: $HOME/.copilot/skills (GitHub Copilot)
+    #   - antigravity: $HOME/.gemini/antigravity/skills (Google Antigravity)
+    #   - gemini: $HOME/.gemini/skills (Gemini CLI)
     # Omit targets to use the defaults; customise or disable as needed:
     targets = {
       agents = {
@@ -75,6 +77,14 @@ Then load it from your main Home Manager config:
       };
       copilot = {
         dest = "$HOME/.copilot/skills";
+        structure = "symlink-tree";
+      };
+      antigravity = {
+        dest = "$HOME/.gemini/antigravity/skills";
+        structure = "symlink-tree";
+      };
+      gemini = {
+        dest = "$HOME/.gemini/skills";
         structure = "symlink-tree";
       };
     };
@@ -94,8 +104,8 @@ Notes:
 ## Flake outputs
 
 - `packages.<system>.agent-skills-bundle`: Store bundle of selected skills (empty by default; configure in consumers).
-- `apps.<system>.skills-install`: Sync bundle to global targets (`$HOME/.agents/skills` for agentskills.io standard, `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` for Claude Code, `$HOME/.copilot/skills` for GitHub Copilot). Override destinations with `AGENT_SKILLS_DESTS`.
-- `apps.<system>.skills-install-local`: Sync bundle to local targets (default `.agents/skills`, `.claude/skills`, `.github/skills` with `copy-tree`). Override root with `AGENT_SKILLS_ROOT`, destinations with `AGENT_SKILLS_LOCAL_DESTS`.
+- `apps.<system>.skills-install`: Sync bundle to global targets (`$HOME/.agents/skills` for agentskills.io standard, `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` for Claude Code, `$HOME/.copilot/skills` for GitHub Copilot, `$HOME/.gemini/antigravity/skills` for Antigravity, and `$HOME/.gemini/skills` for Gemini CLI). Override destinations with `AGENT_SKILLS_DESTS`.
+- `apps.<system>.skills-install-local`: Sync bundle to local targets (default `.agents/skills`, `.claude/skills`, `.github/skills`, `.agent/skills`, `.gemini/skills` with `copy-tree`). Override root with `AGENT_SKILLS_ROOT`, destinations with `AGENT_SKILLS_LOCAL_DESTS`.
 - `apps.<system>.skills-list`: JSON view of the default catalog.
 - `checks.<system>.skills`: Sanity check that the bundle builds.
 - `homeManagerModules.default`: Home Manager module implementing the DSL above.
@@ -170,7 +180,7 @@ Package binaries are referenced with local paths (`./jq` or `./pkg/` for multi-b
 
 - Sync bundle to current directory: `nix run .#skills-install-local`
 
-Local skills are installed to `.agents/skills`, `.claude/skills`, and `.github/skills` relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). Override destinations via `AGENT_SKILLS_LOCAL_DESTS`.
+Local skills are installed to `.agents/skills`, `.claude/skills`, `.github/skills`, `.agent/skills`, and `.gemini/skills` relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). Override destinations via `AGENT_SKILLS_LOCAL_DESTS`.
 Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallScript`.
 Local install skips non-Nix-managed existing paths to avoid clobbering user data; set `AGENT_SKILLS_FORCE=1` to overwrite.
 
@@ -220,7 +230,7 @@ To install skills locally in your project, use `mkLocalInstallScript` in your fl
 }
 ```
 
-Then run `nix run .#skills-install-local` from your project root to install skills to `.agents/skills`, `.claude/skills`, and `.github/skills`.
+Then run `nix run .#skills-install-local` from your project root to install skills to `.agents/skills`, `.claude/skills`, `.github/skills`, `.agent/skills`, and `.gemini/skills`.
 
 ### Auto-install with devShell
 

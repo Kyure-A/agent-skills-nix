@@ -24,7 +24,8 @@
       agentLib = import ./lib/agent-skills.nix { inherit lib inputs; };
 
       # Global targets: .agents/skills (standard), CLAUDE_CONFIG_DIR for Claude Code,
-      # and ~/.copilot/skills for GitHub Copilot.
+      # ~/.copilot/skills for GitHub Copilot, and ~/.gemini paths for
+      # Antigravity/Gemini CLI.
       defaultTargets = agentLib.defaultTargets;
 
       # Local targets: installed to project root (current working directory)

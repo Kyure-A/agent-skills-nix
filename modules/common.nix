@@ -34,6 +34,10 @@ let
             - "$HOME/.agents/skills" (global agentskills.io standard)
             - ".github/skills" (GitHub Copilot repository skills)
             - "$HOME/.copilot/skills" (GitHub Copilot global skills)
+            - ".agent/skills" (Antigravity workspace skills)
+            - "$HOME/.gemini/antigravity/skills" (Antigravity global skills)
+            - ".gemini/skills" (Gemini CLI workspace skills)
+            - "$HOME/.gemini/skills" (Gemini CLI global skills)
           Note: 'link' structure type does not support shell variable expansion;
           use 'symlink-tree' or 'copy-tree' for dynamic paths.
         '';
