@@ -25,62 +25,17 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 
 Put skills config in a small child flake so the only pinned inputs there are skill sources.
 
-`skills/flake.nix` (child, same directory as `home-manager.nix`):
-```nix
-{
-  description = "skills catalog";
+Use the quickstart example:
 
-  inputs = {
-    anthropic-skills.url = "github:anthropics/skills";
-    anthropic-skills.flake = false;
-  };
-
-  outputs = { self, anthropic-skills, ... }:
-    {
-      homeManagerModules.default =
-        import ./home-manager.nix { inherit anthropic-skills; };
-    };
-}
-```
-
-`skills/home-manager.nix` (child):
-```nix
-{ anthropic-skills, ... }:
-{
-  programs.agent-skills = {
-    sources.anthropic = {
-      path = anthropic-skills;
-      subdir = "skills";
-    };
-    skills.enable = [ "frontend-design" "skill-creator" ];
-    # or: skills.enableAll = true;
-    # or: skills.enableAll = [ "anthropic" ];
-  };
-}
-```
-
-Then load it from your main Home Manager config:
-
-```nix
-{ inputs, ... }:
-{
-  imports = [
-    inputs.agent-skills.homeManagerModules.default
-    inputs.skills-config.homeManagerModules.default
-  ];
-
-  programs.agent-skills = {
-    enable = true;
-    # Omit `targets` to use defaults from "Default target paths".
-    # targets.claude.enable = false; # Example override
-  };
-}
-```
+- Overview: [`examples/quickstart/README.md`](./examples/quickstart/README.md)
+- Main (tightly coupled): [`examples/quickstart/main/flake.nix`](./examples/quickstart/main/flake.nix)
+- Child (separated catalog): [`examples/quickstart/child/flake.nix`](./examples/quickstart/child/flake.nix)
 
 Notes:
 
-- If you use a child flake, import both modules: `inputs.agent-skills.homeManagerModules.default` and `inputs.skills-config.homeManagerModules.default`.
-- Pass your flake `inputs` to Home Manager (e.g. `home-manager.extraSpecialArgs = { inherit inputs; };`) so source `input` names resolve.
+- In `main`, `agent-skills` and skill sources are listed directly in the top-level inputs.
+- In `child`, top-level only depends on `skills-catalog = path:./skills`; skills inputs live under `./skills/flake.nix`.
+- If you use source `input` references in your module config, pass flake `inputs` to Home Manager via `extraSpecialArgs`.
 - To disable a default target, set `targets.<name>.enable = false;` (e.g. `targets.agents.enable = false;`).
 - `structure = "link"` uses `home.file` symlinks; `symlink-tree` and `copy-tree` run in `home.activation`.
 - `symlink-tree` uses `rsync -a --delete` (preserve symlinks); `copy-tree` uses `rsync -aL --delete` (dereference symlinks).
@@ -98,14 +53,7 @@ Notes:
 
 ## Library functions
 
-```nix
-let
-  lib = (import ./lib/agent-skills.nix { inherit inputs; lib = nixpkgs.lib; });
-  catalog = lib.discoverCatalog sources;
-  selection = lib.selectSkills { inherit catalog sources; allowlist = [ "foo" ]; skills = { bar = { from = "local"; path = "bar"; }; }; };
-  bundle = lib.mkBundle { pkgs = nixpkgs.legacyPackages.${system}; selection = selection; };
-in { inherit catalog selection bundle; }
-```
+See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
 
 `discoverCatalog` enforces `SKILL.md` presence and rejects duplicate IDs. `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
 
@@ -113,25 +61,7 @@ in { inherit catalog selection bundle; }
 
 Explicit skills support `transform` and `packages` options to customise SKILL.md and bundle dependencies:
 
-```nix
-programs.agent-skills.skills.explicit = {
-  my-skill = {
-    from = "my-source";
-    path = "some-skill";
-    packages = [ pkgs.jq pkgs.curl ];  # Symlinked into skill directory
-    transform = { original, dependencies }: ''
-      # Custom Header
-
-      ${dependencies}
-
-      ${original}
-
-      # See Also
-      - https://example.com
-    '';
-  };
-};
-```
+See [`examples/skill-customization/explicit-transform.nix`](./examples/skill-customization/explicit-transform.nix).
 
 This generates:
 
@@ -175,45 +105,7 @@ Both apps operate on the flake's default (empty) config; point at your own flake
 
 To install skills locally in your project, use `mkLocalInstallScript` in your flake:
 
-```nix
-{
-  inputs = {
-    agent-skills.url = "github:Kyure-A/agent-skills-nix";
-    anthropic-skills.url = "github:anthropics/skills";
-    anthropic-skills.flake = false;
-  };
-
-  outputs = { self, nixpkgs, agent-skills, anthropic-skills, ... }:
-    let
-      system = "x86_64-linux";  # or your system
-      pkgs = nixpkgs.legacyPackages.${system};
-      agentLib = agent-skills.lib.agent-skills;
-
-      sources = {
-        anthropic = {
-          path = anthropic-skills;
-          subdir = "skills";
-        };
-      };
-
-      catalog = agentLib.discoverCatalog sources;
-      allowlist = agentLib.allowlistFor {
-        inherit catalog sources;
-        enable = [ "frontend-design" "skill-creator" ];
-      };
-      selection = agentLib.selectSkills {
-        inherit catalog allowlist sources;
-        skills = {};
-      };
-      bundle = agentLib.mkBundle { inherit pkgs selection; };
-    in {
-      apps.${system}.skills-install-local = {
-        type = "app";
-        program = "${agentLib.mkLocalInstallScript { inherit pkgs bundle; }}/bin/skills-install-local";
-      };
-    };
-}
-```
+See [`examples/local-install/flake.nix`](./examples/local-install/flake.nix).
 
 Then run `nix run .#skills-install-local` from your project root to install skills to the default local targets in **Default target paths**.
 
@@ -221,24 +113,7 @@ Then run `nix run .#skills-install-local` from your project root to install skil
 
 Use `mkShellHook` to automatically install skills when entering a dev shell:
 
-```nix
-{
-  # ... same inputs and setup as above ...
-
-  outputs = { self, nixpkgs, agent-skills, anthropic-skills, ... }:
-    let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      agentLib = agent-skills.lib.agent-skills;
-
-      # ... sources, catalog, selection, bundle setup ...
-    in {
-      devShells.${system}.default = pkgs.mkShell {
-        shellHook = agentLib.mkShellHook { inherit pkgs bundle; };
-      };
-    };
-}
-```
+See [`examples/devshell/flake.nix`](./examples/devshell/flake.nix).
 
 Now `nix develop` will automatically install skills to your project directory.
 
