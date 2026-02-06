@@ -1,4 +1,4 @@
-# Agent Skills Nix Framework
+# agent-skills-nix
 
 Declarative management of Agent Skills (directories containing `SKILL.md`) with flake-pinned sources, discovery, selection, bundling, and Home Manager integration.
 
