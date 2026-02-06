@@ -305,12 +305,14 @@ SKILL_EOF
     }) catalog;
 
   # Default global targets for user-level installation.
-  # Respects CLAUDE_CONFIG_DIR environment variable for Claude Code.
-  # Uses .agents/skills for agentskills.io standard (Codex, etc.).
-  # Supports GitHub Copilot via ~/.copilot/skills.
-  # Supports Cursor via ~/.cursor/skills.
-  # Supports Windsurf via ~/.codeium/windsurf/skills.
-  # Supports Antigravity and Gemini CLI via ~/.gemini paths.
+  # Path references:
+  # - Agent Skills standard: https://agentskills.io
+  # - Claude Code: https://docs.claude.com/en/docs/claude-code/skills
+  # - GitHub Copilot: https://docs.github.com/en/copilot/concepts/agents/about-agent-skills
+  # - Cursor: https://cursor.com/docs/context/skills
+  # - Windsurf: https://docs.windsurf.com/windsurf/cascade/skills
+  # - Gemini CLI: https://geminicli.com/docs/cli/skills/
+  # - Antigravity (path matrix): https://agentskillsrepo.com/docs
   defaultTargets = {
     agents = {
       dest = "$HOME/.agents/skills";
