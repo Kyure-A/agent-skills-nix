@@ -308,6 +308,8 @@ SKILL_EOF
   # Respects CLAUDE_CONFIG_DIR environment variable for Claude Code.
   # Uses .agents/skills for agentskills.io standard (Codex, etc.).
   # Supports GitHub Copilot via ~/.copilot/skills.
+  # Supports Cursor via ~/.cursor/skills.
+  # Supports Windsurf via ~/.codeium/windsurf/skills.
   # Supports Antigravity and Gemini CLI via ~/.gemini paths.
   defaultTargets = {
     agents = {
@@ -324,6 +326,18 @@ SKILL_EOF
     };
     copilot = {
       dest = "$HOME/.copilot/skills";
+      structure = "symlink-tree";
+      enable = true;
+      systems = [];
+    };
+    cursor = {
+      dest = "$HOME/.cursor/skills";
+      structure = "symlink-tree";
+      enable = true;
+      systems = [];
+    };
+    windsurf = {
+      dest = "$HOME/.codeium/windsurf/skills";
       structure = "symlink-tree";
       enable = true;
       systems = [];
@@ -348,6 +362,8 @@ SKILL_EOF
     agents = { dest = ".agents/skills"; structure = "copy-tree"; enable = true; systems = []; };
     claude = { dest = ".claude/skills"; structure = "copy-tree"; enable = true; systems = []; };
     copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = true; systems = []; };
+    cursor = { dest = ".cursor/skills"; structure = "copy-tree"; enable = true; systems = []; };
+    windsurf = { dest = ".windsurf/skills"; structure = "copy-tree"; enable = true; systems = []; };
     antigravity = { dest = ".agent/skills"; structure = "copy-tree"; enable = true; systems = []; };
     gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = true; systems = []; };
   };
