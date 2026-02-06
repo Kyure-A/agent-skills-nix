@@ -28,11 +28,14 @@
         skills = {};
       };
       bundle = agentLib.mkBundle { inherit pkgs selection; };
+      localTargets = {
+        claude = agentLib.defaultLocalTargets.claude // { enable = true; };
+      };
     in
     {
       apps.${system}.skills-install-local = {
         type = "app";
-        program = "${agentLib.mkLocalInstallScript { inherit pkgs bundle; }}/bin/skills-install-local";
+        program = "${agentLib.mkLocalInstallScript { inherit pkgs bundle; targets = localTargets; }}/bin/skills-install-local";
       };
     };
 }

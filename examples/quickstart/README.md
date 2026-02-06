@@ -2,6 +2,8 @@
 
 This directory contains two patterns.
 
+Both patterns enable `targets.claude.enable = true;` explicitly because targets are opt-in by default.
+
 ## `main` (tightly coupled)
 
 `main/flake.nix` lists both `agent-skills` and skill sources directly in the

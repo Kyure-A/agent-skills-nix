@@ -27,10 +27,13 @@
         skills = {};
       };
       bundle = agentLib.mkBundle { inherit pkgs selection; };
+      localTargets = {
+        claude = agentLib.defaultLocalTargets.claude // { enable = true; };
+      };
     in
     {
       devShells.${system}.default = pkgs.mkShell {
-        shellHook = agentLib.mkShellHook { inherit pkgs bundle; };
+        shellHook = agentLib.mkShellHook { inherit pkgs bundle; targets = localTargets; };
       };
     };
 }

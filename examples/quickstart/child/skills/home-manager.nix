@@ -6,5 +6,6 @@
       subdir = "skills";
     };
     skills.enable = [ "frontend-design" "skill-creator" ];
+    targets.claude.enable = true;
   };
 }
