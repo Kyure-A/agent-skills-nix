@@ -132,6 +132,14 @@
             inherit pkgs;
             agentLib = lib;
           };
+          home-manager-warnings = import ./test/home-manager-warnings.nix {
+            inherit pkgs;
+            hmLib = home-manager.lib;
+            agentSkillsModule = import ./modules/home-manager/agent-skills.nix {
+              inherit inputs;
+              lib = nixpkgs.lib;
+            };
+          };
         });
 
       homeManagerModules.default =
