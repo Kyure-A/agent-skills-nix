@@ -13,6 +13,7 @@ let
   agentLib = agentLibFor (args.inputs or {});
 
   activeTargets = agentLib.targetsFor { targets = cfg.targets; system = pkgs.system; };
+  anyTargetEnabled = lib.any (t: t.enable or false) (builtins.attrValues cfg.targets);
 
   linkTargets = lib.filterAttrs (_: t: t.structure == "link") activeTargets;
   syncTargets = lib.filterAttrs (_: t: t.structure != "link") activeTargets;
@@ -30,6 +31,10 @@ in
   config = lib.mkIf cfg.enable (let
     bundle = cfg.bundlePath;
   in {
+    warnings = lib.optionals (!anyTargetEnabled) [
+      "agent-skills: programs.agent-skills.enable is true, but no install targets are enabled. Set targets.<name>.enable = true (for example, targets.claude.enable = true)."
+    ];
+
     home.activation.agent-skills =
       lib.mkIf (syncTargets != {}) (lib.hm.dag.entryAfter [ "writeBoundary" ] (syncScript bundle));
 

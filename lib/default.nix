@@ -305,62 +305,64 @@ SKILL_EOF
     }) catalog;
 
   # Default global targets for user-level installation.
+  # Targets are opt-in by default; enable explicitly per target.
   # Canonical path docs live in README.md#default-target-paths.
   defaultTargets = {
     agents = {
       dest = "$HOME/.agents/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     claude = {
       dest = "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     copilot = {
       dest = "$HOME/.copilot/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     cursor = {
       dest = "$HOME/.cursor/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     windsurf = {
       dest = "$HOME/.codeium/windsurf/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     antigravity = {
       dest = "$HOME/.gemini/antigravity/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
     gemini = {
       dest = "$HOME/.gemini/skills";
       structure = "symlink-tree";
-      enable = true;
+      enable = false;
       systems = [];
     };
   };
 
   # Default local targets for project-local skill installation.
+  # Targets are opt-in by default; enable explicitly per target.
   # Uses relative paths for project-local installation (not global env vars).
   defaultLocalTargets = {
-    agents = { dest = ".agents/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    claude = { dest = ".claude/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    cursor = { dest = ".cursor/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    windsurf = { dest = ".windsurf/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    antigravity = { dest = ".agent/skills"; structure = "copy-tree"; enable = true; systems = []; };
-    gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = true; systems = []; };
+    agents = { dest = ".agents/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    claude = { dest = ".claude/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    cursor = { dest = ".cursor/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    windsurf = { dest = ".windsurf/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    antigravity = { dest = ".agent/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = false; systems = []; };
   };
 
   # Default exclude patterns for rsync synchronization.
