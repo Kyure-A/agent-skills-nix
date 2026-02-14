@@ -45,6 +45,7 @@ let
     else id;
 
   # Recursively search for SKILL.md directories up to `maxDepth`.
+  # null = unlimited (capped internally at 100 to guard against symlink loops).
   discoverSource = name: cfg:
     let
       skillsRoot' = resolveSourceRoot name cfg + "/${cfg.subdir or "."}";
@@ -52,7 +53,7 @@ let
         throw "agent-skills: source ${name} subdir ${toString skillsRoot'} does not exist"
       else skillsRoot';
 
-      maxDepth = cfg.filter.maxDepth or 1;
+      maxDepth = cfg.filter.maxDepth or null;
       nameRegex = cfg.filter.nameRegex or null;
 
       scan = path: relParts: depth:
@@ -76,8 +77,9 @@ let
             if entries.${n} == "directory" || entries.${n} == "symlink" then [ n ] else []
           ) (attrNames entries);
 
+          effectiveMax = if maxDepth == null then 100 else maxDepth;
           deeper =
-            if depth < maxDepth then
+            if depth < effectiveMax then
               concatMap (n: scan (path + "/${n}") (relParts ++ [ n ]) (depth + 1)) dirs
             else [];
         in current ++ deeper;
@@ -97,7 +99,7 @@ let
         in lib.attrsets.foldlAttrs
           (inner: id: skill:
             if inner ? ${id} then
-              throw "agent-skills: duplicate skill id ${id} from ${skill.source} and ${inner.${id}.source}"
+              throw "agent-skills: duplicate skill id '${id}' found in source '${skill.source}' (${toString skill.absPath}) and source '${inner.${id}.source}' (${toString inner.${id}.absPath})"
             else inner // { ${id} = skill; }
           )
           acc

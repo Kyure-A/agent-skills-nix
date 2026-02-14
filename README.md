@@ -5,9 +5,16 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 ## Concepts
 
 - **sources**: Named inputs (flake or path) pointing at a skills root (`subdir`).
-- **discover**: Scans sources for directories that contain `SKILL.md`, producing a catalog.
+- **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
 - **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
 - **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). The `dest` option supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). See **Default target paths** below.
+
+## Source filters
+
+Each source supports optional filters to control discovery:
+
+- **`filter.maxDepth`** (`null | int`, default: `null`): Maximum recursion depth for SKILL.md discovery. `null` = unlimited (capped internally at 100 to guard against symlink loops), `1` = immediate children only, `2` = one level of nesting. Set to `1` to restore pre-recursive (flat-only) behavior.
+- **`filter.nameRegex`** (`null | string`, default: `null`): Regex matched against the skill's relative path (e.g. `cat-a/skill-1`) to restrict discovery.
 
 ## Default target paths
 
@@ -56,7 +63,7 @@ Notes:
 
 See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
 
-`discoverCatalog` enforces `SKILL.md` presence and rejects duplicate IDs. `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
+`discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). It enforces `SKILL.md` presence and rejects duplicate IDs (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
 
 ## Skill customisation
 
@@ -123,4 +130,18 @@ Now `nix develop` will automatically install skills to your project directory.
 - Disallows skill IDs containing `/..` or leading `/`.
 - Verifies `SKILL.md` for discovered and explicit skills.
 - Fails on duplicate IDs across sources.
+- Caps recursion at 100 levels when maxDepth is null to guard against symlink loops.
 - Activation scripts always `mkdir -p` and use `rsync -a --delete` by default.
+
+## Breaking changes
+
+### filter.maxDepth default changed from 1 to null
+
+Skill discovery now recurses into nested directories by default. If your source layout relies on flat-only discovery (one level of directories under the source root), add `filter.maxDepth = 1;` to your source configuration:
+
+```nix
+sources.my-skills = {
+  path = ./skills;
+  filter.maxDepth = 1;  # restore flat-only behavior
+};
+```

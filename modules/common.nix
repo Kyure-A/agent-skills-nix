@@ -74,9 +74,9 @@ let
 
       filter = {
         maxDepth = lib.mkOption {
-          type = lib.types.int;
-          default = 1;
-          description = "Recursion depth when discovering SKILL.md directories.";
+          type = lib.types.nullOr lib.types.ints.positive;
+          default = null;
+          description = "Recursion depth when discovering SKILL.md directories. 1 = immediate children only, 2 = one level of nesting, null = unlimited (capped at 100).";
         };
 
         nameRegex = lib.mkOption {

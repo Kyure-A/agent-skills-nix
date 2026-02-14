@@ -124,6 +124,10 @@
             mkdir -p "$out"
             touch "$out/ok"
           '';
+          discover = import ./test/discover.nix {
+            inherit pkgs;
+            agentLib = lib;
+          };
           transform-packages = import ./test/transform-packages.nix {
             inherit pkgs;
             agentLib = lib;
