@@ -12,7 +12,7 @@ let
   cfg = config.programs.agent-skills;
   agentLib = agentLibFor (args.inputs or {});
 
-  activeTargets = agentLib.targetsFor { targets = cfg.targets; system = pkgs.system; };
+  activeTargets = agentLib.targetsFor { targets = cfg.targets; system = pkgs.stdenv.hostPlatform.system; };
   anyTargetEnabled = lib.any (t: t.enable or false) (builtins.attrValues cfg.targets);
 
   linkTargets = lib.filterAttrs (_: t: t.structure == "link") activeTargets;
@@ -21,7 +21,7 @@ let
   syncScript = bundle: agentLib.mkSyncScript {
     inherit pkgs bundle;
     targets = syncTargets;
-    system = pkgs.system;
+    system = pkgs.stdenv.hostPlatform.system;
     excludePatterns = cfg.excludePatterns;
   };
 in

@@ -82,7 +82,7 @@
             text = lib.mkSyncScript {
               inherit pkgs bundle;
               targets = defaultTargets;
-              system = pkgs.system;
+              system = pkgs.stdenv.hostPlatform.system;
               allowOverrides = true;
             };
           };

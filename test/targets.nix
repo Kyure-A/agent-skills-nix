@@ -30,7 +30,7 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
   # Test that targetsFor filters correctly
   # All targets are disabled by default
   ${let
-    activeTargets = agentLib.targetsFor { targets = agentLib.defaultTargets; system = pkgs.system; };
+    activeTargets = agentLib.targetsFor { targets = agentLib.defaultTargets; system = pkgs.stdenv.hostPlatform.system; };
   in ''
     test "${toString (builtins.length (builtins.attrNames activeTargets))}" = "0" || { echo "Expected 0 active targets"; exit 1; }
   ''}
@@ -41,7 +41,7 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
       targets = agentLib.defaultTargets // {
         claude = agentLib.defaultTargets.claude // { enable = true; };
       };
-      system = pkgs.system;
+      system = pkgs.stdenv.hostPlatform.system;
     };
   in ''
     test "${toString (builtins.length (builtins.attrNames enabledClaudeTargets))}" = "1" || { echo "Expected 1 active target when only claude is enabled"; exit 1; }

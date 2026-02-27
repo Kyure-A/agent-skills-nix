@@ -384,7 +384,7 @@ SKILL_EOF
   # Respects target enable/system filters and structure (link/symlink-tree/copy-tree).
   mkLocalInstallScript = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
     let
-      activeTargets = targetsFor { inherit targets; system = pkgs.system; };
+      activeTargets = targetsFor { inherit targets; system = pkgs.stdenv.hostPlatform.system; };
       targetsList = lib.mapAttrsToList (name: t:
         let
           structure = t.structure or "copy-tree";
@@ -520,7 +520,7 @@ SKILL_EOF
     pkgs,
     bundle,
     targets,
-    system ? pkgs.system,
+    system ? pkgs.stdenv.hostPlatform.system,
     allowOverrides ? false,
     overrideEnvVar ? "AGENT_SKILLS_DESTS",
     overrideStructure ? "symlink-tree",
