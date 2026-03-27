@@ -27,6 +27,7 @@ let
   inherit (lib.strings)
     hasInfix
     hasPrefix
+    hasSuffix
     ;
 
   # Resolve the root path for a source, preferring an explicit path and
@@ -44,6 +45,23 @@ let
       throw "agent-skills: invalid skill id ${id} (must not start with '/' or contain '..')"
     else id;
 
+  prefixSkillId = prefix: baseId:
+    let
+      validatedBaseId = assertSkillId baseId;
+      validatedPrefix =
+        if prefix == null || prefix == "" then null
+        else
+          let checkedPrefix = assertSkillId prefix;
+          in
+          if hasSuffix "/" checkedPrefix then
+            throw "agent-skills: invalid source idPrefix ${checkedPrefix} (must not end with '/')"
+          else checkedPrefix;
+    in
+    assertSkillId (
+      if validatedPrefix == null then validatedBaseId
+      else "${validatedPrefix}/${validatedBaseId}"
+    );
+
   # Recursively search for SKILL.md directories up to `maxDepth`.
   # null = unlimited (capped internally at 100 to guard against symlink loops).
   discoverSource = name: cfg:
@@ -53,6 +71,7 @@ let
         throw "agent-skills: source ${name} subdir ${toString skillsRoot'} does not exist"
       else skillsRoot';
 
+      idPrefix = cfg.idPrefix or null;
       maxDepth = cfg.filter.maxDepth or null;
       nameRegex = cfg.filter.nameRegex or null;
 
@@ -65,7 +84,7 @@ let
           current =
             if include then [
               {
-                id = assertSkillId (if relPath == "" then name else relPath);
+                id = prefixSkillId idPrefix (if relPath == "" then name else relPath);
                 source = name;
                 relPath = relPath;
                 absPath = path;

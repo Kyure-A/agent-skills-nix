@@ -72,6 +72,12 @@ let
         description = "Subdirectory under the input/path that contains skills.";
       };
 
+      idPrefix = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional prefix to prepend to discovered skill IDs (for example, `openai` -> `openai/pdf`).";
+      };
+
       filter = {
         maxDepth = lib.mkOption {
           type = lib.types.nullOr lib.types.ints.positive;
