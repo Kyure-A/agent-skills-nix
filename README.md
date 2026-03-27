@@ -4,7 +4,7 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 
 ## Concepts
 
-- **sources**: Named inputs (flake or path) pointing at a skills root (`subdir`).
+- **sources**: Named inputs (flake or path) pointing at a skills root (`subdir`). Optional `idPrefix` namespaces discovered skill IDs to avoid collisions across sources.
 - **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
 - **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
 - **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). The `dest` option supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). See **Default target paths** below.
@@ -13,8 +13,27 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 
 Each source supports optional filters to control discovery:
 
+- **`idPrefix`** (`null | string`, default: `null`): Prefix prepended to discovered skill IDs. Useful when multiple sources expose the same relative path, e.g. `idPrefix = "openai";` turns `pdf` into `openai/pdf`.
 - **`filter.maxDepth`** (`null | int`, default: `null`): Maximum recursion depth for SKILL.md discovery. `null` = unlimited (capped internally at 100 to guard against symlink loops), `1` = immediate children only, `2` = one level of nesting. Set to `1` to restore pre-recursive (flat-only) behavior.
 - **`filter.nameRegex`** (`null | string`, default: `null`): Regex matched against the skill's relative path (e.g. `cat-a/skill-1`) to restrict discovery.
+
+If two sources both expose `pdf`, prefix them explicitly to keep IDs unique:
+
+```nix
+sources.openai = {
+  input = "openai-skills";
+  subdir = "skills";
+  idPrefix = "openai";
+};
+
+sources.anthropic = {
+  input = "anthropic-skills";
+  subdir = "skills";
+  idPrefix = "anthropic";
+};
+
+skills.enable = [ "openai/pdf" "anthropic/pdf" ];
+```
 
 ## Default target paths
 
@@ -63,7 +82,7 @@ Notes:
 
 See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
 
-`discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). It enforces `SKILL.md` presence and rejects duplicate IDs (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
+`discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). Set `idPrefix` on a source to namespace discovered IDs (for example, `openai/pdf`). It enforces `SKILL.md` presence and rejects duplicate IDs after prefixing (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
 
 ## Skill customisation
 
@@ -128,6 +147,7 @@ Now `nix develop` will automatically install skills to your project directory.
 ## Checks / safety
 
 - Disallows skill IDs containing `/..` or leading `/`.
+- Disallows source `idPrefix` values ending with `/`.
 - Verifies `SKILL.md` for discovered and explicit skills.
 - Fails on duplicate IDs across sources.
 - Caps recursion at 100 levels when maxDepth is null to guard against symlink loops.
