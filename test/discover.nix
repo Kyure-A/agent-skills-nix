@@ -39,6 +39,19 @@ let
   };
   testDuplicate = builtins.tryEval (builtins.deepSeq (agentLib.discoverCatalog duplicateSources) true);
 
+  prefixedSources = {
+    source-a = {
+      path = ./fixtures/nested-skills;
+      idPrefix = "alpha";
+    };
+    source-b = {
+      path = ./fixtures/nested-skills;
+      idPrefix = "beta";
+    };
+  };
+  prefixedCatalog = agentLib.discoverCatalog prefixedSources;
+  prefixedIds = builtins.attrNames prefixedCatalog;
+
   # Build a bundle with nested skills to verify directory structure
   nestedAllowlist = agentLib.allowlistFor {
     catalog = nestedCatalog;
@@ -115,7 +128,28 @@ pkgs.runCommand "agent-skills-discover-test" {} ''
   echo "Test 3 passed!"
 
   echo ""
-  echo "=== Test 4: Explicit maxDepth=1 restricts discovery ==="
+  echo "=== Test 4: idPrefix namespaces duplicate discovered IDs ==="
+  prefixed_count=${toString (builtins.length prefixedIds)}
+  test "$prefixed_count" -eq "4" || {
+    echo "Expected 4 prefixed skills, got $prefixed_count"
+    exit 1
+  }
+  ${if prefixedCatalog ? "alpha/cat-a/skill-1" then ''
+    echo "ID alpha/cat-a/skill-1 found"
+  '' else ''
+    echo "ERROR: ID alpha/cat-a/skill-1 not found"
+    exit 1
+  ''}
+  ${if prefixedCatalog ? "beta/cat-a/skill-1" then ''
+    echo "ID beta/cat-a/skill-1 found"
+  '' else ''
+    echo "ERROR: ID beta/cat-a/skill-1 not found"
+    exit 1
+  ''}
+  echo "Test 4 passed!"
+
+  echo ""
+  echo "=== Test 5: Explicit maxDepth=1 restricts discovery ==="
   restricted_count=${toString (builtins.length restrictedIds)}
   # maxDepth=1 starting from nested-skills root: depth 0 scans root (no SKILL.md),
   # depth 1 scans cat-a (no SKILL.md), but does NOT recurse into skill-1/skill-2.
@@ -125,10 +159,10 @@ pkgs.runCommand "agent-skills-discover-test" {} ''
     exit 1
   }
   echo "maxDepth=1 correctly restricted discovery to 0 skills"
-  echo "Test 4 passed!"
+  echo "Test 5 passed!"
 
   echo ""
-  echo "=== Test 5: Default (null) discovers at arbitrary depth ==="
+  echo "=== Test 6: Default (null) discovers at arbitrary depth ==="
   # This is the same as Test 1 but confirms that default behavior (no filter.maxDepth set)
   # finds skills at depth > 1
   test "$actual_count" -ge "2" || {
@@ -136,10 +170,10 @@ pkgs.runCommand "agent-skills-discover-test" {} ''
     exit 1
   }
   echo "Default maxDepth=null correctly discovered $actual_count nested skills"
-  echo "Test 5 passed!"
+  echo "Test 6 passed!"
 
   echo ""
-  echo "=== Test 6: Bundle with nested IDs creates correct directory structure ==="
+  echo "=== Test 7: Bundle with nested IDs creates correct directory structure ==="
   # Check that the bundle has the correct nested directory structure
   test -d "${nestedBundle}/cat-a" || {
     echo "ERROR: cat-a directory not found in bundle"
@@ -163,7 +197,7 @@ pkgs.runCommand "agent-skills-discover-test" {} ''
     exit 1
   }
   echo "Bundle nested directory structure is correct"
-  echo "Test 6 passed!"
+  echo "Test 7 passed!"
 
   echo ""
   echo "All discover tests passed!"
