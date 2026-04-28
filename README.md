@@ -41,6 +41,7 @@ skills.enable = [ "openai/pdf" "anthropic/pdf" ];
 |--------|-------------|------------|
 | agents | `$HOME/.agents/skills` | `.agents/skills` |
 | codex | `${CODEX_HOME:-$HOME/.codex}/skills` | `.codex/skills` |
+| opencode | `$HOME/.config/opencode/skills` | `.opencode/skills` |
 | claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` | `.claude/skills` |
 | copilot | `$HOME/.copilot/skills` | `.github/skills` |
 | cursor | `$HOME/.cursor/skills` | `.cursor/skills` |

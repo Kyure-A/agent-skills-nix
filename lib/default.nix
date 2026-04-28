@@ -341,6 +341,12 @@ SKILL_EOF
       enable = false;
       systems = [];
     };
+    opencode = {
+      dest = "$HOME/.config/opencode/skills";
+      structure = "symlink-tree";
+      enable = false;
+      systems = [];
+    };
     claude = {
       dest = "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills";
       structure = "symlink-tree";
@@ -385,6 +391,7 @@ SKILL_EOF
   defaultLocalTargets = {
     agents = { dest = ".agents/skills"; structure = "copy-tree"; enable = false; systems = []; };
     codex = { dest = ".codex/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    opencode = { dest = ".opencode/skills"; structure = "copy-tree"; enable = false; systems = []; };
     claude = { dest = ".claude/skills"; structure = "copy-tree"; enable = false; systems = []; };
     copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = false; systems = []; };
     cursor = { dest = ".cursor/skills"; structure = "copy-tree"; enable = false; systems = []; };
