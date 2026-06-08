@@ -121,6 +121,20 @@ ${original}
     };
   };
 
+  # Case 8: multi-binary packages are not rewritten to missing ./binary paths
+  testSelectionRewriteMultiBin = agentLib.selectSkills {
+    catalog = rewriteCatalog;
+    allowlist = [];
+    sources = rewriteSources;
+    skills = {
+      test-skill-rewrite-multi-bin = {
+        from = "rewrite-fixtures";
+        path = ".";
+        packages = [ pkgs.bun ];
+      };
+    };
+  };
+
   # Case 5: Error case - transform is not a function
   invalidSelection = agentLib.selectSkills {
     catalog = testCatalog;
@@ -171,6 +185,12 @@ ${original}
     inherit pkgs;
     selection = testSelectionRewriteDisabled;
     name = "agent-skills-test-rewrite-disabled";
+  };
+
+  testBundleRewriteMultiBin = agentLib.mkBundle {
+    inherit pkgs;
+    selection = testSelectionRewriteMultiBin;
+    name = "agent-skills-test-rewrite-multi-bin";
   };
 in
 pkgs.runCommand "agent-skills-transform-packages-test" {} ''
@@ -309,6 +329,24 @@ pkgs.runCommand "agent-skills-transform-packages-test" {} ''
   grep -q "## Dependencies" "$skillMd7" || { echo "Dependencies section not found"; exit 1; }
 
   echo "Case 7 passed!"
+
+  echo ""
+  echo "=== Case 8: rewriteCommands skips multi-binary packages ==="
+  skillMd8="${testBundleRewriteMultiBin}/test-skill-rewrite-multi-bin/SKILL.md"
+  skillDir8="${testBundleRewriteMultiBin}/test-skill-rewrite-multi-bin"
+
+  test -f "$skillMd8" || { echo "SKILL.md not found"; exit 1; }
+
+  # bun exposes multiple binaries under ./bun/, so bare bunx must not become a missing ./bunx path.
+  grep -q '^bunx --version' "$skillMd8" || { echo "Bare bunx should remain for multi-binary package"; exit 1; }
+  ! grep -q '\./bunx' "$skillMd8" || { echo "bunx was rewritten to missing ./bunx path"; exit 1; }
+
+  # The actual multi-binary package layout should still be available.
+  test -L "$skillDir8/bun" || { echo "bun symlink not found"; exit 1; }
+  test -x "$skillDir8/bun/bun" || { echo "bun binary not found"; exit 1; }
+  test -x "$skillDir8/bun/bunx" || { echo "bunx binary not found"; exit 1; }
+
+  echo "Case 8 passed!"
 
   echo ""
   echo "All tests passed!"

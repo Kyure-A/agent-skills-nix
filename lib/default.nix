@@ -176,12 +176,12 @@ let
         ) packages;
       in header + rows + "\n\n";
 
-  # Rewrite bare command names to ./command paths in content.
+  # Rewrite single-binary package commands to ./command paths in content.
   rewriteCommandPaths = content: packages:
     let
       allBinNames = lib.unique (concatMap (pkg:
         let info = getPkgBinInfo pkg;
-        in if info.isDir then info.binaries else [ info.name ]
+        in if info.isDir then [] else [ info.name ]
       ) packages);
     in
     if allBinNames == [] then content
@@ -238,7 +238,7 @@ let
           source = srcName;
           meta = cfg.meta or {};
           transform = cfg.transform or null;
-          rewriteCommands = cfg.rewriteCommands or true;
+          rewriteCommands = if cfg ? rewriteCommands then cfg.rewriteCommands else true;
           packages = cfg.packages or [];
         }
       ) explicit;
@@ -277,8 +277,8 @@ let
           originalContent = readFile (skillPath + "/SKILL.md");
           packagesTable = mkPackagesTable (skill.packages or []);
 
-          # Optionally rewrite bare command names to ./command paths
-          hasRewrite = (skill.rewriteCommands or true) && hasPackages;
+          # Optionally rewrite single-binary command names to ./command paths.
+          hasRewrite = (if skill ? rewriteCommands then skill.rewriteCommands else true) && hasPackages;
           rewrittenContent =
             if hasRewrite then rewriteCommandPaths originalContent (skill.packages or [])
             else originalContent;
