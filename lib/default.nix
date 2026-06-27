@@ -493,6 +493,12 @@ SKILL_EOF
       enable = false;
       systems = [];
     };
+    pi = {
+      dest = "$HOME/.pi/agent/skills";
+      structure = "symlink-tree";
+      enable = false;
+      systems = [];
+    };
   };
 
   # Default local targets for project-local skill installation.
@@ -508,6 +514,7 @@ SKILL_EOF
     windsurf = { dest = ".windsurf/skills"; structure = "copy-tree"; enable = false; systems = []; };
     antigravity = { dest = ".agent/skills"; structure = "copy-tree"; enable = false; systems = []; };
     gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    pi = { dest = ".pi/skills"; structure = "copy-tree"; enable = false; systems = []; };
   };
 
   # Default exclude patterns for rsync synchronization.

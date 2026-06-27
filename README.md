@@ -48,6 +48,7 @@ skills.enable = [ "openai/pdf" "anthropic/pdf" ];
 | windsurf | `$HOME/.codeium/windsurf/skills` | `.windsurf/skills` |
 | antigravity | `$HOME/.gemini/antigravity/skills` | `.agent/skills` |
 | gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
+| pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
 
 ## Quick start (child flake + Home Manager)
 
