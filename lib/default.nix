@@ -347,22 +347,35 @@ let
           chmod -R u+w "$out"
           ${pkgs.findutils}/bin/find "$out" -xtype l -delete
         '';
+      # Dump every unique source root to the store exactly once up front.
+      # builtins.path re-streams its input to the daemon on every call (there
+      # is no eval-time dedup for store-path inputs with a custom name), so
+      # calling sourceRootStorePath per skill multiplied eval-time I/O by 2x
+      # the skill count — e.g. a 68MB root with 32 skills pushed ~4.3GB
+      # through the daemon socket per evaluation.
+      uniqueSourceRoots = unique (map sourceRootFor skills);
+      dumpedRoots = map (root: builtins.path {
+        path = root;
+        name = "agent-skills-source";
+      }) uniqueSourceRoots;
+      # Look up a skill's dumped root by list position: path values compare
+      # by path string under ==, and unlike toString this works on paths that
+      # still carry derivation string context.
+      storePathFor = skill:
+        let i = lib.lists.findFirstIndex (root: root == sourceRootFor skill) null uniqueSourceRoots;
+        in if i == null then throw "agent-skills: internal error: source root not memoized" else builtins.elemAt dumpedRoots i;
       safeSourceRoots = foldl'
-        (acc: skill:
-          let
-            storePath = sourceRootStorePath skill;
-            key = sourceRootKey storePath;
-          in
-          if acc ? ${key} then acc
-          else acc // { ${key} = mkSafeSourceRoot storePath key; })
+        (acc: storePath:
+          let key = sourceRootKey storePath;
+          in acc // { ${key} = mkSafeSourceRoot storePath key; })
         {}
-        skills;
+        dumpedRoots;
       buildCommands = concatMapStringsSep "\n" (skill:
         let
           hasTransform = skill ? transform && skill.transform != null && isFunction skill.transform;
           hasPackages = (skill.packages or []) != [];
           needsCustomisation = hasTransform || hasPackages;
-          safeRoot = safeSourceRoots.${sourceRootKey (sourceRootStorePath skill)};
+          safeRoot = safeSourceRoots.${sourceRootKey (storePathFor skill)};
           sourceRelPath = sourceRelPathFor skill;
           skillPath = appendRelPath safeRoot sourceRelPath;
           validateSkillPath = ''
