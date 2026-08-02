@@ -18,7 +18,7 @@ let
   linkTargets = lib.filterAttrs (_: t: t.structure == "link") activeTargets;
   syncTargets = lib.filterAttrs (_: t: t.structure != "link") activeTargets;
 
-  syncProgram = bundle: agentLib.mkSyncProgram {
+  syncScript = bundle: agentLib.mkSyncScript {
     inherit pkgs bundle;
     targets = syncTargets;
     system = pkgs.stdenv.hostPlatform.system;
@@ -36,9 +36,7 @@ in
     ];
 
     home.activation.agent-skills =
-      lib.mkIf (syncTargets != {}) (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        ${syncProgram bundle}/bin/skills-install
-      '');
+      lib.mkIf (syncTargets != {}) (lib.hm.dag.entryAfter [ "writeBoundary" ] (syncScript bundle));
 
     # Note: 'link' structure type uses home.file which requires a static path relative to $HOME.
     # Shell variable expansion in dest is not supported for 'link' type.
