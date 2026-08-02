@@ -30,6 +30,8 @@ inputs.nixpkgs.lib.genAttrs systems (
       targets = agentLib.defaultLocalTargets;
     };
 
+    sourceLockProgram = agentLib.mkSourceLockProgram { inherit pkgs; };
+
     listScript = pkgs.writeShellApplication {
       name = "skills-list";
       runtimeInputs = [
@@ -53,6 +55,10 @@ inputs.nixpkgs.lib.genAttrs systems (
     skills-list = {
       type = "app";
       program = "${listScript}/bin/skills-list";
+    };
+    skills-sources-lock = {
+      type = "app";
+      program = "${sourceLockProgram}/bin/skills-sources-lock";
     };
   }
 )

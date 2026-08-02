@@ -1,0 +1,87 @@
+{
+  "manifests": {
+    "alpha": {
+      "filter": { "maxDepth": 3, "nameRegex": null },
+      "idPrefix": "fixture",
+      "pin": {
+        "at": null,
+        "branch": "main; touch PWNED",
+        "forge": "none",
+        "preReleases": false,
+        "releasePrefix": null,
+        "submodules": false,
+        "type": "git",
+        "url": "https://example.invalid/alpha.git",
+        "versionUpperBound": null
+      },
+      "subdir": "."
+    },
+    "release": {
+      "filter": { "maxDepth": null, "nameRegex": null },
+      "idPrefix": "release",
+      "pin": {
+        "at": null,
+        "branch": null,
+        "owner": "example",
+        "preReleases": false,
+        "releasePrefix": null,
+        "repo": "release",
+        "submodules": false,
+        "type": "github",
+        "versionUpperBound": null
+      },
+      "subdir": "."
+    },
+    "zeta": {
+      "filter": { "maxDepth": null, "nameRegex": null },
+      "idPrefix": "second",
+      "pin": {
+        "at": null,
+        "branch": "main",
+        "owner": "example",
+        "preReleases": false,
+        "releasePrefix": null,
+        "repo": "zeta",
+        "submodules": false,
+        "type": "github",
+        "versionUpperBound": null
+      },
+      "subdir": "."
+    }
+  },
+  "npins": {
+    "pins": {
+      "alpha": {
+        "branch": "main",
+        "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "repository": { "type": "Git", "url": "https://example.invalid/alpha.git" },
+        "revision": "0000000000000000000000000000000000000000",
+        "submodules": false,
+        "type": "Git",
+        "url": null,
+        "version": null
+      },
+      "release": {
+        "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "repository": { "owner": "example", "repo": "release", "type": "GitHub" },
+        "revision": "0000000000000000000000000000000000000000",
+        "submodules": false,
+        "type": "GitRelease",
+        "url": null,
+        "version": "1.0.0"
+      },
+      "zeta": {
+        "branch": "main",
+        "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "repository": { "owner": "example", "repo": "zeta", "type": "GitHub" },
+        "revision": "0000000000000000000000000000000000000000",
+        "submodules": false,
+        "type": "Git",
+        "url": null,
+        "version": null
+      }
+    },
+    "version": 8
+  },
+  "schemaVersion": 1
+}

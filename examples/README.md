@@ -7,3 +7,4 @@ Use-case-oriented examples for `agent-skills-nix`.
 - `skill-customization/`: `transform` and `packages` customization
 - `local-install/`: project-local install app with `mkLocalInstallProgram`
 - `devshell/`: auto-install with `mkShellHook`
+- `source-registry/`: per-source manifests plus an npins JSON lock, without one flake input per skill repository
