@@ -1,7 +1,14 @@
 { pkgs, agentLib }:
 
 let
-  lockProgram = agentLib.mkSourceLockProgram { inherit pkgs; };
+  productionLockProgram = agentLib.mkSourceLockProgram { inherit pkgs; };
+  testLockProgram = pkgs.writeShellApplication {
+    name = "skills-sources-lock";
+    runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.nix pkgs.npins ];
+    text = ''
+      exec ${pkgs.bash}/bin/bash ${../scripts/source-lock.sh} "$@"
+    '';
+  };
 in
 pkgs.runCommand "agent-skills-source-registry-npins-local-test"
 {
@@ -9,9 +16,11 @@ pkgs.runCommand "agent-skills-source-registry-npins-local-test"
     pkgs.git
     pkgs.jq
     pkgs.nix
-    lockProgram
+    testLockProgram
   ];
 } ''
+  ${productionLockProgram}/bin/skills-sources-lock --help >/dev/null
+
   # Nested Nix and npins cannot use the outer daemon from a Linux build sandbox.
   export NIX_REMOTE=local
   export NIX_STATE_DIR="$TMPDIR/nix-state"

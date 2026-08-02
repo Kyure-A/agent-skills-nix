@@ -116,9 +116,16 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.jq ];
     text = builtins.readFile (fixtureRoot + "/fake-npins.sh");
   };
-  lockProgram = agentLib.mkSourceLockProgram {
+  productionLockProgram = agentLib.mkSourceLockProgram {
     inherit pkgs;
     npins = fakeNpins;
+  };
+  testLockProgram = pkgs.writeShellApplication {
+    name = "skills-sources-lock";
+    runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.nix fakeNpins ];
+    text = ''
+      exec ${pkgs.bash}/bin/bash ${../scripts/source-lock.sh} "$@"
+    '';
   };
 in
 assert _manifestAssertions;
@@ -126,6 +133,8 @@ pkgs.runCommand "agent-skills-source-registry-test"
 {
   nativeBuildInputs = [ pkgs.coreutils pkgs.jq ];
 } ''
+  ${productionLockProgram}/bin/skills-sources-lock --help >/dev/null
+
   # Nested Nix cannot use the outer daemon from a Linux build sandbox.
   export NIX_REMOTE=local
   export NIX_STATE_DIR="$TMPDIR/nix-state"
@@ -152,7 +161,7 @@ pkgs.runCommand "agent-skills-source-registry-test"
   chmod -R u+w "$work"
   cd "$work"
 
-  ${lockProgram}/bin/skills-sources-lock
+  ${testLockProgram}/bin/skills-sources-lock
   test -f registry/sources.lock.json
   test "$(jq -r .schemaVersion registry/sources.lock.json)" = 1
   test "$(jq -r .npins.version registry/sources.lock.json)" = 8
@@ -163,24 +172,24 @@ pkgs.runCommand "agent-skills-source-registry-test"
   test ! -e PWNED
 
   cp registry/sources.lock.json first-lock.json
-  ${lockProgram}/bin/skills-sources-lock
+  ${testLockProgram}/bin/skills-sources-lock
   cmp first-lock.json registry/sources.lock.json
 
   mkdir registry/lock-directory
-  if ${lockProgram}/bin/skills-sources-lock --lock-file registry/lock-directory; then
+  if ${testLockProgram}/bin/skills-sources-lock --lock-file registry/lock-directory; then
     echo "expected directory lock path to fail" >&2
     exit 1
   fi
   test ! -e registry/lock-directory/sources.canonical.json
 
-  if ${lockProgram}/bin/skills-sources-lock \
+  if ${testLockProgram}/bin/skills-sources-lock \
     --manifest-dir "$work/invalid-value-manifests"; then
     echo "expected Nix manifest type validation to fail" >&2
     exit 1
   fi
   cmp first-lock.json registry/sources.lock.json
 
-  if ${lockProgram}/bin/skills-sources-lock \
+  if ${testLockProgram}/bin/skills-sources-lock \
     --manifest-dir "$work/failing-manifests"; then
     echo "expected failing source resolution to fail" >&2
     exit 1
