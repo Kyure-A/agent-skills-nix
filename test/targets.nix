@@ -24,6 +24,11 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
     test "${if agentLib.defaultLocalTargets.${name}.enable then "true" else "false"}" = "false" || { echo "Expected local ${name}.enable=false by default"; exit 1; }
   '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi"]}
 
+  test "${agentLib.defaultLocalTargets.antigravity.dest}" = ".agents/skills" || {
+    echo "Unexpected default local antigravity.dest"
+    exit 1
+  }
+
   echo ""
   echo "=== Testing targetsFor filtering ==="
 

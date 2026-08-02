@@ -512,7 +512,7 @@ SKILL_EOF
     copilot = { dest = ".github/skills"; structure = "copy-tree"; enable = false; systems = []; };
     cursor = { dest = ".cursor/skills"; structure = "copy-tree"; enable = false; systems = []; };
     windsurf = { dest = ".windsurf/skills"; structure = "copy-tree"; enable = false; systems = []; };
-    antigravity = { dest = ".agent/skills"; structure = "copy-tree"; enable = false; systems = []; };
+    antigravity = { dest = ".agents/skills"; structure = "copy-tree"; enable = false; systems = []; };
     gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = false; systems = []; };
     pi = { dest = ".pi/skills"; structure = "copy-tree"; enable = false; systems = []; };
   };
