@@ -40,6 +40,24 @@
     inherit pkgs agentLib bundle;
   };
 
+  source-lock-shellcheck = pkgs.runCommand "agent-skills-source-lock-shellcheck" {
+    nativeBuildInputs = [ pkgs.shellcheck ];
+  } ''
+    shellcheck \
+      ${../scripts/source-lock.sh} \
+      ${./fixtures/source-registry/fake-npins.sh} \
+      ${./fixtures/source-registry/local-npins-test.sh}
+    mkdir -p "$out"
+  '';
+
+  source-registry = import ./source-registry.nix {
+    inherit pkgs agentLib;
+  };
+
+  source-registry-npins-local = import ./source-registry-npins-local.nix {
+    inherit pkgs agentLib;
+  };
+
   home-manager-warnings = import ./home-manager-warnings.nix {
     inherit pkgs hmLib agentSkillsModule;
   };

@@ -2,6 +2,12 @@
 { pkgs, agentLib, bundle }:
 
 let
+  legacySources.fixture = {
+    path = ./fixtures/test-skill;
+    subdir = ".";
+  };
+  legacyCatalog = agentLib.discoverCatalog legacySources;
+
   legacyLocalProgram = agentLib.mkLocalInstallScript {
     inherit pkgs bundle;
     targets = {};
@@ -33,10 +39,15 @@ let
   _assertSyncText =
     if builtins.isString legacySyncText && pkgs.lib.hasInfix "/bin/skills-install" legacySyncText then true
     else throw "agent-skills compatibility test failed: mkSyncScript must return runnable shell source";
+
+  _assertSourcesDsl =
+    if legacyCatalog ? fixture && legacyCatalog.fixture.source == "fixture" then true
+    else throw "agent-skills compatibility test failed: path-backed sources DSL changed";
 in
 assert _assertLocalDerivation;
 assert _assertLocalAlias;
 assert _assertSyncText;
+assert _assertSourcesDsl;
 pkgs.runCommand "agent-skills-consumer-api-compatibility-test" {} ''
   ${legacyLocalProgram}/bin/skills-install-local
   ${legacyWrappedProgram}/bin/legacy-skills-install
