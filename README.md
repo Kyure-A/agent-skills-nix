@@ -7,7 +7,7 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 - **sources**: Named inputs (flake or path) pointing at a skills root (`subdir`). Optional `idPrefix` namespaces discovered skill IDs to avoid collisions across sources.
 - **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
 - **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
-- **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). The `dest` option supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). See **Default target paths** below.
+- **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). Runtime destinations support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms without general shell evaluation. See **Default target paths** below.
 
 ## Source filters
 
@@ -68,7 +68,7 @@ Notes:
 - To enable a default target, set `targets.<name>.enable = true;` (e.g. `targets.claude.enable = true;`).
 - `structure = "link"` uses `home.file` symlinks; `symlink-tree` and `copy-tree` run in `home.activation`.
 - `symlink-tree` uses `rsync -a --delete` (preserve symlinks); `copy-tree` uses `rsync -aL --delete` (dereference symlinks).
-- `dest` supports shell variable expansion at runtime (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). Note: `link` structure does not support shell variables and will use the fallback path.
+- Runtime `dest` values support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). Home Manager's `link` structure requires a static path and uses the fallback path.
 - Symlinks inside skills are preserved when their target stays inside the source root; escaping or dangling ones are dropped. See [Symlinks inside skills](#symlinks-inside-skills).
 
 ## Flake outputs
@@ -79,13 +79,15 @@ Notes:
 - `apps.<system>.skills-list`: JSON view of the default catalog.
 - `checks.<system>.skills`: Sanity check that the bundle builds.
 - `homeManagerModules.default`: Home Manager module implementing the DSL above.
-- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
+- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
 
 ## Library functions
 
 See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
 
 `discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). Set `idPrefix` on a source to namespace discovered IDs (for example, `openai/pdf`). It enforces `SKILL.md` presence and rejects duplicate IDs after prefixing (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
+
+`mkSyncProgram` returns a `skills-install` executable after filtering enabled targets for the requested system. `mkLocalInstallProgram` is its project-local wrapper and returns `skills-install-local`. Both serialize a versioned JSON configuration and invoke the shared synchronization runtime; they do not return inline shell source. Existing consumer flakes can continue using `mkSyncScript` and `mkLocalInstallScript`; these compatibility wrappers preserve their original return types while delegating to the shared runtime. `mkShellHook` runs the local program from a development shell.
 
 ## Skill customisation
 
@@ -126,14 +128,14 @@ Package binaries are referenced with local paths (`./jq` or `./pkg/` for multi-b
 - Sync bundle to current directory: `nix run .#skills-install-local`
 
 Local skills are installed to enabled local targets in **Default target paths** relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). Override destinations via `AGENT_SKILLS_LOCAL_DESTS`.
-Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallScript`.
-Local install skips non-Nix-managed existing paths to avoid clobbering user data; set `AGENT_SKILLS_FORCE=1` to overwrite.
+Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallProgram`.
+The synchronizer refuses to replace a non-empty, unmarked directory. A successful tree sync records ownership in `.agent-skills-managed.json`; set `AGENT_SKILLS_FORCE=1` only when you intentionally want agent-skills to take over an existing destination.
 
 Both apps operate on the flake's default (empty) config; point at your own flake/module for real catalogs.
 
 ## Local skills in your project
 
-To install skills locally in your project, use `mkLocalInstallScript` in your flake:
+To install skills locally in your project, use `mkLocalInstallProgram` in your flake:
 
 See [`examples/local-install/flake.nix`](./examples/local-install/flake.nix).
 
@@ -164,9 +166,15 @@ Symlinks inside skill directories are kept when their textual target stays insid
 - Preserves symlinks that stay inside a declared source root and drops escaping or dangling symlinks when materializing bundles.
 - Rejects `..` traversal in source `subdir` and explicit skill `path` values.
 - Caps recursion at 100 levels when maxDepth is null to guard against symlink loops.
-- Activation scripts always `mkdir -p` and use `rsync -a --delete` by default.
+- Passes destinations as JSON data; shell metacharacters and command-substitution syntax are not evaluated as shell code.
+- Tree synchronization validates destination ownership before using `rsync --delete`; managed destinations carry a `.agent-skills-managed.json` marker.
+- Local destinations are resolved beneath `AGENT_SKILLS_ROOT` (or the current directory) and paths that escape that root are rejected.
 
 ## Breaking changes
+
+### Managed destination ownership
+
+Tree synchronization now requires a valid `.agent-skills-managed.json` marker before replacing a non-empty destination. For an existing destination created by an older release, inspect it first and set `AGENT_SKILLS_FORCE=1` for the one-time takeover.
 
 ### filter.maxDepth default changed from 1 to null
 
