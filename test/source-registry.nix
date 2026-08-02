@@ -126,9 +126,29 @@ pkgs.runCommand "agent-skills-source-registry-test"
 {
   nativeBuildInputs = [ pkgs.coreutils pkgs.jq ];
 } ''
+  # Nested Nix cannot use the outer daemon from a Linux build sandbox.
+  export NIX_REMOTE=local
+  export NIX_STATE_DIR="$TMPDIR/nix-state"
+  export NIX_DATA_DIR="$TMPDIR/nix-data"
+  export NIX_LOG_DIR="$TMPDIR/nix-log"
+  export NIX_STORE_DIR="$TMPDIR/nix-store"
+  mkdir -p "$NIX_STATE_DIR" "$NIX_DATA_DIR" "$NIX_LOG_DIR" "$NIX_STORE_DIR"
+
+  # A private store cannot import the outer store paths, so copy evaluator inputs.
+  nix_runtime="$TMPDIR/nix-runtime"
+  mkdir -p "$nix_runtime"
+  cp ${../lib/eval-source-manifests.nix} "$nix_runtime/eval-source-manifests.nix"
+  cp ${../lib/source-registry.nix} "$nix_runtime/source-registry.nix"
+  cp -R ${pkgs.path + "/lib"} "$nix_runtime/nixpkgs-lib"
+  export AGENT_SKILLS_SOURCE_NORMALIZER="$nix_runtime/eval-source-manifests.nix"
+  export AGENT_SKILLS_NIXPKGS_LIB="$nix_runtime/nixpkgs-lib"
+  export AGENT_SKILLS_SOURCE_REGISTRY_LIB="$nix_runtime/source-registry.nix"
+
   work="$TMPDIR/source registry"
   mkdir -p "$work/registry"
   cp -R ${fixtureRoot + "/manifests"} "$work/registry/sources"
+  cp -R ${fixtureRoot + "/invalid-value-manifests"} "$work/invalid-value-manifests"
+  cp -R ${fixtureRoot + "/failing-manifests"} "$work/failing-manifests"
   chmod -R u+w "$work"
   cd "$work"
 
@@ -154,14 +174,14 @@ pkgs.runCommand "agent-skills-source-registry-test"
   test ! -e registry/lock-directory/sources.canonical.json
 
   if ${lockProgram}/bin/skills-sources-lock \
-    --manifest-dir ${fixtureRoot + "/invalid-value-manifests"}; then
+    --manifest-dir "$work/invalid-value-manifests"; then
     echo "expected Nix manifest type validation to fail" >&2
     exit 1
   fi
   cmp first-lock.json registry/sources.lock.json
 
   if ${lockProgram}/bin/skills-sources-lock \
-    --manifest-dir ${fixtureRoot + "/failing-manifests"}; then
+    --manifest-dir "$work/failing-manifests"; then
     echo "expected failing source resolution to fail" >&2
     exit 1
   fi

@@ -349,9 +349,16 @@ let
         npins
       ];
       text = ''
-        export AGENT_SKILLS_SOURCE_NORMALIZER=${lib.escapeShellArg (toString ./eval-source-manifests.nix)}
-        export AGENT_SKILLS_NIXPKGS_LIB=${lib.escapeShellArg (toString (pkgs.path + "/lib"))}
-        export AGENT_SKILLS_SOURCE_REGISTRY_LIB=${lib.escapeShellArg (toString ./source-registry.nix)}
+        # Sandboxed integration tests point these at copies visible to their private Nix store.
+        if [[ -z "''${AGENT_SKILLS_SOURCE_NORMALIZER:-}" ]]; then
+          export AGENT_SKILLS_SOURCE_NORMALIZER=${lib.escapeShellArg (toString ./eval-source-manifests.nix)}
+        fi
+        if [[ -z "''${AGENT_SKILLS_NIXPKGS_LIB:-}" ]]; then
+          export AGENT_SKILLS_NIXPKGS_LIB=${lib.escapeShellArg (toString (pkgs.path + "/lib"))}
+        fi
+        if [[ -z "''${AGENT_SKILLS_SOURCE_REGISTRY_LIB:-}" ]]; then
+          export AGENT_SKILLS_SOURCE_REGISTRY_LIB=${lib.escapeShellArg (toString ./source-registry.nix)}
+        fi
         exec ${pkgs.bash}/bin/bash ${../scripts/source-lock.sh} \
           --manifest-dir ${lib.escapeShellArg (toString manifestsDir)} \
           --lock-file ${lib.escapeShellArg (toString lockFile)} \
