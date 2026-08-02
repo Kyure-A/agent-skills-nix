@@ -81,6 +81,10 @@ Notes:
 - `homeManagerModules.default`: Home Manager module implementing the DSL above.
 - `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
 
+## Development structure
+
+The root `flake.nix` only declares inputs and invokes [Blueprint](https://github.com/numtide/blueprint). Blueprint discovers packages, checks, and the public library under `nix/`; `nix/flake-outputs.nix` projects those pieces onto the existing public output names and wires the apps and Home Manager module. Runtime and domain logic remain in `scripts/`, `lib/`, `modules/`, and `test/`.
+
 ## Library functions
 
 See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
