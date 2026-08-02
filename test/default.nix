@@ -29,6 +29,17 @@
     inherit pkgs agentLib;
   };
 
+  sync-shellcheck = pkgs.runCommand "agent-skills-sync-shellcheck" {
+    nativeBuildInputs = [ pkgs.shellcheck ];
+  } ''
+    shellcheck ${../scripts/sync.sh}
+    mkdir -p "$out"
+  '';
+
+  compatibility = import ./compatibility.nix {
+    inherit pkgs agentLib bundle;
+  };
+
   home-manager-warnings = import ./home-manager-warnings.nix {
     inherit pkgs hmLib agentSkillsModule;
   };

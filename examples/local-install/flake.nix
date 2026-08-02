@@ -35,7 +35,7 @@
     {
       apps.${system}.skills-install-local = {
         type = "app";
-        program = "${agentLib.mkLocalInstallScript { inherit pkgs bundle; targets = localTargets; }}/bin/skills-install-local";
+        program = "${agentLib.mkLocalInstallProgram { inherit pkgs bundle; targets = localTargets; }}/bin/skills-install-local";
       };
     };
 }
