@@ -43,8 +43,8 @@ let
     else throw "agent-skills input-source test failed: expected skill catalog entry from input source";
 
   _assertActivation =
-    if pkgs.lib.hasInfix "/bin/skills-install" activation then true
-    else throw "agent-skills input-source test failed: activation script did not invoke the sync program";
+    if pkgs.lib.hasInfix "bundle=/nix/store/" activation then true
+    else throw "agent-skills input-source test failed: activation script did not capture the bundle path";
 in
 assert _assertBundle;
 assert _assertCatalog;

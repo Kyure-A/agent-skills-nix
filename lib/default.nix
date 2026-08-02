@@ -44,6 +44,19 @@ let
       throw "agent-skills: ${ctx} '${rel}' must be relative and must not traverse outside the source root"
     else rel;
 
+  # Shared bash helper injected into both the local-install and sync scripts.
+  # Some destinations are populated by previous `copy-tree` runs that copied
+  # from the read-only Nix store, leaving the tree non-writable. rsync needs
+  # write permission to update those trees, so chmod before syncing.
+  ensureWritableTreeBash = ''
+    ensure_writable_tree() {
+      local path="$1"
+      if [ -e "$path" ] && [ ! -L "$path" ]; then
+        chmod -R u+w "$path"
+      fi
+    }
+  '';
+
   # Resolve the root path for a source, preferring an explicit path and
   # falling back to a flake input name.
   resolveSourceRoot = name: cfg:
@@ -522,88 +535,252 @@ SKILL_EOF
   # The leading "/" ensures only the top-level .system is excluded, not .system dirs inside skills.
   defaultExcludePatterns = [ "/.system" ];
 
-  # Build an executable that delegates synchronization to the shared runtime.
-  # Nix is responsible only for filtering targets and serializing configuration;
-  # destination expansion and filesystem safety checks happen at runtime.
-  mkSyncProgram = {
+  # Create a local install script for use in consumer flakes.
+  # This allows projects to install skills to their local directory.
+  # Respects target enable/system filters and structure (link/symlink-tree/copy-tree).
+  mkLocalInstallScript = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
+    let
+      activeTargets = targetsFor { inherit targets; system = pkgs.stdenv.hostPlatform.system; };
+      targetsList = lib.mapAttrsToList (name: t:
+        let
+          structure = t.structure or "copy-tree";
+          dest = t.dest;
+        in
+          ''"${name}|${structure}|${dest}"''
+      ) activeTargets;
+      targetsArray = lib.concatStringsSep "\n  " targetsList;
+      excludeFlags = concatMapStringsSep " " (p: "--exclude='${p}'") excludePatterns;
+    in
+    pkgs.writeShellApplication {
+      name = "skills-install-local";
+      runtimeInputs = [ pkgs.rsync pkgs.coreutils ];
+      text = ''
+        root="''${AGENT_SKILLS_ROOT:-$PWD}"
+        bundle=${bundle}
+        if [ ! -d "$bundle" ]; then
+          echo "agent-skills: bundle not built" >&2
+          exit 1
+        fi
+
+        targets=(
+          ${targetsArray}
+        )
+
+        override=()
+        if [ -n "''${AGENT_SKILLS_LOCAL_DESTS:-}" ]; then
+          read -r -a override <<< "''${AGENT_SKILLS_LOCAL_DESTS:-}"
+        fi
+
+        # Check if path is safe to overwrite for the requested structure.
+        is_safe_to_overwrite() {
+          local path="$1"
+          local structure="$2"
+          if [ ! -e "$path" ]; then
+            return 0  # Doesn't exist, safe
+          fi
+          if [ -L "$path" ]; then
+            local target
+            target="$(readlink -f "$path")"
+            if [[ "$target" == /nix/store/* ]]; then
+              return 0  # Symlink to Nix store, safe
+            fi
+            return 1
+          fi
+
+          case "$structure" in
+            copy-tree)
+              # copy-tree is designed for mutable local directories.
+              if [ -d "$path" ]; then
+                return 0
+              fi
+              ;;
+          esac
+
+          return 1  # Not safe
+        }
+
+        ${ensureWritableTreeBash}
+
+        for i in "''${!targets[@]}"; do
+          IFS="|" read -r name structure dest <<< "''${targets[$i]}"
+          if [ -n "''${override[$i]:-}" ]; then
+            dest="''${override[$i]}"
+          fi
+          if [ -z "$dest" ]; then
+            continue
+          fi
+          full_dest="$root/$dest"
+
+          if ! is_safe_to_overwrite "$full_dest" "$structure"; then
+            echo "agent-skills: $full_dest exists and is not a Nix-managed path" >&2
+            echo "agent-skills: skipping to avoid overwriting user data" >&2
+            echo "agent-skills: remove manually or set AGENT_SKILLS_FORCE=1 to overwrite" >&2
+            if [ "''${AGENT_SKILLS_FORCE:-}" != "1" ]; then
+              continue
+            fi
+            echo "agent-skills: AGENT_SKILLS_FORCE=1 set, overwriting anyway" >&2
+          fi
+
+          case "$structure" in
+            link)
+              mkdir -p "$(dirname "$full_dest")"
+              rm -rf "$full_dest"
+              ln -s "$bundle" "$full_dest"
+              ;;
+            symlink-tree)
+              if [ -L "$full_dest" ]; then
+                rm -rf "$full_dest"
+              fi
+              mkdir -p "$full_dest"
+              ensure_writable_tree "$full_dest"
+              ${pkgs.rsync}/bin/rsync -a --delete ${excludeFlags} "$bundle/" "$full_dest/"
+              # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+              chmod u+w "$full_dest"
+              ;;
+            copy-tree)
+              if [ -L "$full_dest" ]; then
+                rm -rf "$full_dest"
+              fi
+              mkdir -p "$full_dest"
+              ensure_writable_tree "$full_dest"
+              ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$full_dest/"
+              # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+              chmod u+w "$full_dest"
+              ;;
+            *)
+              echo "agent-skills: unknown structure '$structure' for target '$name'" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "agent-skills: installed to $full_dest"
+        done
+
+        if [ "''${#override[@]}" -gt "''${#targets[@]}" ]; then
+          for ((i=''${#targets[@]}; i<''${#override[@]}; i++)); do
+            dest="''${override[$i]}"
+            if [ -z "$dest" ]; then
+              continue
+            fi
+            full_dest="$root/$dest"
+            if ! is_safe_to_overwrite "$full_dest" "copy-tree"; then
+              echo "agent-skills: $full_dest exists and is not a Nix-managed path" >&2
+              echo "agent-skills: skipping to avoid overwriting user data" >&2
+              echo "agent-skills: remove manually or set AGENT_SKILLS_FORCE=1 to overwrite" >&2
+              if [ "''${AGENT_SKILLS_FORCE:-}" != "1" ]; then
+                continue
+              fi
+              echo "agent-skills: AGENT_SKILLS_FORCE=1 set, overwriting anyway" >&2
+            fi
+            if [ -L "$full_dest" ]; then
+              rm -rf "$full_dest"
+            fi
+            mkdir -p "$full_dest"
+            ensure_writable_tree "$full_dest"
+            ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$full_dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$full_dest"
+            echo "agent-skills: installed to $full_dest"
+          done
+        fi
+      '';
+    };
+
+  # Create a sync script for user-level installation targets.
+  # Respects target enable/system filters and structure (link/symlink-tree/copy-tree).
+  # Optionally allows overriding destinations via an environment variable.
+  mkSyncScript = {
     pkgs,
     bundle,
     targets,
     system ? pkgs.stdenv.hostPlatform.system,
-    mode ? "global",
-    programName ? (if mode == "local" then "skills-install-local" else "skills-install"),
     allowOverrides ? false,
-    overrideEnvVar ? (if mode == "local" then "AGENT_SKILLS_LOCAL_DESTS" else "AGENT_SKILLS_DESTS"),
-    overrideStructure ? (if mode == "local" then "copy-tree" else "symlink-tree"),
+    overrideEnvVar ? "AGENT_SKILLS_DESTS",
+    overrideStructure ? "symlink-tree",
     excludePatterns ? defaultExcludePatterns,
   }:
     let
       activeTargets = targetsFor { inherit targets system; };
-      config = {
-        schemaVersion = 1;
-        inherit mode excludePatterns;
-        bundle = "${bundle}";
-        targets = lib.mapAttrsToList (name: target: {
-          inherit name;
-          structure = target.structure or (if mode == "local" then "copy-tree" else "symlink-tree");
-          dest = target.dest;
-        }) activeTargets;
-        overrides = {
-          enabled = allowOverrides;
-          envVar = overrideEnvVar;
-          structure = overrideStructure;
-        };
-      };
-      configFile = pkgs.writeText "${programName}-config.json" (builtins.toJSON config);
-    in
-    pkgs.writeShellApplication {
-      name = programName;
-      runtimeInputs = [
-        pkgs.coreutils
-        pkgs.jq
-        pkgs.rsync
-      ];
-      text = ''
-        exec ${pkgs.bash}/bin/bash ${../scripts/sync.sh} ${configFile} "$@"
-      '';
-    };
-
-  # Project-local synchronization uses the same runtime with local path guards
-  # and the established local override environment variables.
-  mkLocalInstallProgram = {
-    pkgs,
-    bundle,
-    targets ? defaultLocalTargets,
-    system ? pkgs.stdenv.hostPlatform.system,
-    excludePatterns ? defaultExcludePatterns,
-  }:
-    mkSyncProgram {
-      inherit pkgs bundle targets system excludePatterns;
-      mode = "local";
-      programName = "skills-install-local";
-      allowOverrides = true;
-      overrideEnvVar = "AGENT_SKILLS_LOCAL_DESTS";
-      overrideStructure = "copy-tree";
-    };
-
-  # Compatibility wrappers for consumer flakes using the original public API.
-  # New code should use mkSyncProgram/mkLocalInstallProgram directly.
-  mkSyncScript = args:
-    let
-      syncProgram = mkSyncProgram args;
+      targetsList = lib.mapAttrsToList (name: t:
+        let
+          structure = t.structure or "symlink-tree";
+          dest = t.dest;
+        in
+          ''"${name}|${structure}|${dest}"''
+      ) activeTargets;
+      targetsArray = lib.concatStringsSep "\n  " targetsList;
+      excludeFlags = concatMapStringsSep " " (p: "--exclude='${p}'") excludePatterns;
+      overrideVar = "\${" + overrideEnvVar + ":-}";
+      overrideSnippet = if allowOverrides then ''
+        if [ -n "${overrideVar}" ]; then
+          read -r -a override <<< "${overrideVar}"
+          for dest in "''${override[@]}"; do
+            if [ -z "$dest" ]; then continue; fi
+            sync_dest "$dest" "${overrideStructure}" "override"
+          done
+          exit 0
+        fi
+      '' else "";
     in ''
-      ${syncProgram}/bin/skills-install
-    '';
+      bundle=${bundle}
+      if [ ! -d "$bundle" ]; then
+        echo "agent-skills: bundle not built" >&2
+        exit 1
+      fi
 
-  mkLocalInstallScript = args: mkLocalInstallProgram args;
+      ${ensureWritableTreeBash}
+
+      sync_dest() {
+        local dest="$1"
+        local structure="$2"
+        local name="$3"
+        case "$structure" in
+          link)
+            mkdir -p "$(dirname "$dest")"
+            rm -rf "$dest"
+            ln -s "$bundle" "$dest"
+            ;;
+          symlink-tree)
+            mkdir -p "$dest"
+            ensure_writable_tree "$dest"
+            ${pkgs.rsync}/bin/rsync -a --delete ${excludeFlags} "$bundle/" "$dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$dest"
+            ;;
+          copy-tree)
+            mkdir -p "$dest"
+            ensure_writable_tree "$dest"
+            ${pkgs.rsync}/bin/rsync -aL --delete ${excludeFlags} "$bundle/" "$dest/"
+            # Ensure dest is writable so agents can create subdirectories (e.g., .system)
+            chmod u+w "$dest"
+            ;;
+          *)
+            echo "agent-skills: unknown structure '$structure' for target '$name'" >&2
+            exit 1
+            ;;
+        esac
+      }
+
+      ${overrideSnippet}
+
+      targets=(
+        ${targetsArray}
+      )
+
+      for entry in "''${targets[@]}"; do
+        IFS="|" read -r name structure dest <<< "$entry"
+        if [ -z "$dest" ]; then continue; fi
+        sync_dest "$dest" "$structure" "$name"
+      done
+    '';
 
   # Create a shellHook string for use in devShells.
   # Automatically installs skills when entering the dev shell.
   mkShellHook = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
     let
-      installProgram = mkLocalInstallProgram { inherit pkgs bundle targets excludePatterns; };
+      installScript = mkLocalInstallScript { inherit pkgs bundle targets excludePatterns; };
     in ''
-      ${installProgram}/bin/skills-install-local
+      ${installScript}/bin/skills-install-local
     '';
 
 in
@@ -618,9 +795,7 @@ in
   getPkgBinInfo = getPkgBinInfo;
   catalogJson = catalogJson;
   mkLocalInstallScript = mkLocalInstallScript;
-  mkLocalInstallProgram = mkLocalInstallProgram;
   mkSyncScript = mkSyncScript;
-  mkSyncProgram = mkSyncProgram;
   mkShellHook = mkShellHook;
   defaultTargets = defaultTargets;
   defaultLocalTargets = defaultLocalTargets;
