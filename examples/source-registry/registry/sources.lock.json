@@ -1,0 +1,42 @@
+{
+  "manifests": {
+    "anthropic": {
+      "filter": {
+        "maxDepth": null,
+        "nameRegex": null
+      },
+      "idPrefix": "anthropic",
+      "pin": {
+        "at": null,
+        "branch": "main",
+        "owner": "anthropics",
+        "preReleases": false,
+        "releasePrefix": null,
+        "repo": "skills",
+        "submodules": false,
+        "type": "github",
+        "versionUpperBound": null
+      },
+      "subdir": "skills"
+    }
+  },
+  "npins": {
+    "pins": {
+      "anthropic": {
+        "branch": "main",
+        "hash": "sha256-RH2B03gj4kzw1j5LORezgUZPPu8mW+mWb+Kl2U7WUbY=",
+        "repository": {
+          "owner": "anthropics",
+          "repo": "skills",
+          "type": "GitHub"
+        },
+        "revision": "b29e7cf65e5cb78a5ac33d582270551bc74a14eb",
+        "submodules": false,
+        "type": "Git",
+        "url": "https://github.com/anthropics/skills/archive/b29e7cf65e5cb78a5ac33d582270551bc74a14eb.tar.gz"
+      }
+    },
+    "version": 8
+  },
+  "schemaVersion": 1
+}

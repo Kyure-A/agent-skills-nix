@@ -17,4 +17,4 @@ jobs:
           nix fmt
           git diff --exit-code
       - name: Run flake check
-        run: nix flake check
+        run: nix flake check --print-build-logs
