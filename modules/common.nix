@@ -27,13 +27,14 @@ let
           then agentLib.defaultTargets.${name}.dest
           else throw "agent-skills: target '${name}' requires a 'dest' option";
         description = ''
-          Destination path for skills. Supports shell variable expansion at runtime.
+          Destination path for skills. Global targets support $HOME, ~, and
+          ''${VAR:-$HOME/...} fallback forms at runtime; local paths are literal.
           See README.md#default-target-paths for the full default path matrix.
           Examples:
             - "$HOME/.agents/skills" (global)
             - ".agents/skills" (project-local)
             - "''${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" (env-expanded)
-          Note: 'link' structure type does not support shell variable expansion;
+          Note: 'link' structure type does not support runtime path expressions;
           use 'symlink-tree' or 'copy-tree' for dynamic paths.
         '';
       };

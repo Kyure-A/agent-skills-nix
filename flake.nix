@@ -76,15 +76,11 @@
           bundle = bundleFor system;
           listJson = pkgs.writeText "agent-skills-catalog.json" (builtins.toJSON (lib.catalogJson defaultCatalog));
 
-          installScript = pkgs.writeShellApplication {
-            name = "skills-install";
-            runtimeInputs = [ pkgs.rsync pkgs.coreutils ];
-            text = lib.mkSyncScript {
-              inherit pkgs bundle;
-              targets = defaultTargets;
-              system = pkgs.stdenv.hostPlatform.system;
-              allowOverrides = true;
-            };
+          installProgram = lib.mkSyncProgram {
+            inherit pkgs bundle;
+            targets = defaultTargets;
+            system = pkgs.stdenv.hostPlatform.system;
+            allowOverrides = true;
           };
 
           listScript = pkgs.writeShellApplication {
@@ -95,18 +91,18 @@
             '';
           };
 
-          installLocalScript = lib.mkLocalInstallScript {
+          installLocalProgram = lib.mkLocalInstallProgram {
             inherit pkgs bundle;
             targets = defaultLocalTargets;
           };
         in {
           skills-install = {
             type = "app";
-            program = "${installScript}/bin/skills-install";
+            program = "${installProgram}/bin/skills-install";
           };
           skills-install-local = {
             type = "app";
-            program = "${installLocalScript}/bin/skills-install-local";
+            program = "${installLocalProgram}/bin/skills-install-local";
           };
           skills-list = {
             type = "app";
