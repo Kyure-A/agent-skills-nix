@@ -4,6 +4,7 @@ let
   inherit (inputs.nixpkgs) lib;
   systems = import ./systems.nix;
   checkNames = [
+    "agent-plugin"
     "compatibility"
     "discover"
     "home-manager-input-source"

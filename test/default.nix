@@ -17,6 +17,10 @@
     inherit pkgs agentLib;
   };
 
+  agent-plugin = import ./agent-plugin.nix {
+    inherit pkgs agentLib;
+  };
+
   transform-packages = import ./transform-packages.nix {
     inherit pkgs agentLib;
   };

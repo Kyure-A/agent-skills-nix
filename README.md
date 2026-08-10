@@ -1,12 +1,13 @@
 # agent-skills-nix
 
-Declarative management of Agent Skills (directories containing `SKILL.md`) with flake-pinned sources, discovery, selection, bundling, and Home Manager integration.
+Declarative management of Agent Skills (directories containing `SKILL.md`) with flake-pinned sources, discovery, selection, bundling, Home Manager integration, and skills-only Agent Plugin export.
 
 ## Concepts
 
 - **sources**: Named inputs or paths pointing at a skills root (`subdir`). They can be written directly as before, or generated from the optional source registry. Optional `idPrefix` namespaces discovered skill IDs to avoid collisions across sources.
 - **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
 - **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
+- **Agent Plugin export**: Maps selected catalog entries to portable skill names and produces a self-contained, skills-only plugin directory.
 - **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). Runtime destinations support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms without general shell evaluation. See **Default target paths** below.
 
 ## Source filters
@@ -166,7 +167,7 @@ Notes:
 - `apps.<system>.skills-sources-lock`: Resolve `registry/sources/*.nix` and atomically update `registry/sources.lock.json`.
 - `checks.<system>.skills`: Sanity check that the bundle builds.
 - `homeManagerModules.default`: Home Manager module implementing the DSL above.
-- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `loadSourceManifests`, `sourcesFromLock`, `mkSourceLockProgram`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
+- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `mkAgentPlugin`, `loadSourceManifests`, `sourcesFromLock`, `mkSourceLockProgram`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
 
 ## Development structure
 
@@ -185,6 +186,50 @@ path-backed source shape accepted by `discoverCatalog`. `mkSourceLockProgram`
 builds the updater used by the `skills-sources-lock` app.
 
 `mkSyncProgram` returns a `skills-install` executable after filtering enabled targets for the requested system. `mkLocalInstallProgram` is its project-local wrapper and returns `skills-install-local`. Both serialize a versioned JSON configuration and invoke the shared synchronization runtime; they do not return inline shell source. Existing consumer flakes can continue using `mkSyncScript` and `mkLocalInstallScript`; these compatibility wrappers preserve their original return types while delegating to the shared runtime. `mkShellHook` runs the local program from a development shell.
+
+## Agent Plugin export (experimental)
+
+`mkAgentPlugin` turns an explicit map of selected skills into a skills-only
+plugin for ChatGPT and Codex. It follows OpenAI's current
+[plugin packaging format](https://developers.openai.com/plugins/build/plugins):
+the manifest is written to `.codex-plugin/plugin.json`, while the exported
+skills live directly under `skills/`.
+
+```nix
+plugin = agentLib.mkAgentPlugin {
+  inherit pkgs;
+
+  manifest = {
+    name = "document-tools";
+    version = "0.1.0";
+    description = "Portable document workflows";
+  };
+
+  skills = {
+    pdf = selection."openai/pdf";
+  };
+};
+```
+
+The attribute names in `skills` become the exported skill directory names.
+This explicit mapping flattens catalog IDs such as `openai/pdf` into portable
+names such as `pdf`; the matching `SKILL.md` frontmatter must use that same
+name. The exporter adds `"skills": "./skills/"` to the manifest.
+
+The initial exporter deliberately supports skills only. A selected skill with
+`packages` or a `transform` is rejected because those bundle features can
+create output that is not portable outside the Nix store. Each accepted skill
+is copied with its payload into the result, internal links are materialized,
+and the completed plugin contains no symlinks. See the runnable
+[`examples/agent-plugin`](./examples/agent-plugin) flake.
+
+The exporter owns the manifest's `skills` field and rejects `apps`,
+`mcpServers`, and `hooks`. Plugin-level asset fields such as `composerIcon`,
+`logo`, `logoDark`, and `screenshots` are also outside this initial API; keep
+visual assets inside individual skills instead. If present, `defaultPrompt`
+supports at most three entries of 128 characters each. Plugin-bundled skills
+must follow the Agent Skills naming and description rules, and cannot set
+`disable-model-invocation` to `true`.
 
 ## Skill customisation
 
