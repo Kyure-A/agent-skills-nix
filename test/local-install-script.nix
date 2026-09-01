@@ -143,6 +143,25 @@ pkgs.runCommand "agent-skills-sync-program-integration-test" { } ''
   "${pkgs.jq}/bin/jq" -e 'type == "object"' "$fresh_dest/${markerName}" >/dev/null \
     || fail "managed marker must contain valid JSON"
 
+  grep -q "installed codex to $fresh_dest" "$PWD/fresh-install.log" \
+    || fail "synchronization should report installed targets by default"
+
+  # Quiet mode drops the progress lines but still synchronizes the tree.
+  echo "stale" > "$fresh_dest/quiet-stale.txt"
+  (
+    cd "$fresh"
+    AGENT_SKILLS_ROOT="$fresh" AGENT_SKILLS_QUIET=1 \
+      "${copyProgram}/bin/skills-install-local"
+  ) > "$PWD/quiet-install.log" 2>&1 || {
+    cat "$PWD/quiet-install.log" >&2
+    fail "quiet synchronization should succeed"
+  }
+
+  test ! -s "$PWD/quiet-install.log" \
+    || fail "quiet synchronization should print nothing on success"
+  test ! -e "$fresh_dest/quiet-stale.txt" \
+    || fail "quiet synchronization did not synchronize the destination"
+
   # Excluded paths survive synchronization. A managed read-only tree can be
   # made writable, cleaned, and synchronized again.
   mkdir -p "$fresh_dest/.system" "$fresh_dest/keep-me"

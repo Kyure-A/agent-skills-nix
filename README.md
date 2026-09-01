@@ -291,6 +291,11 @@ See [`examples/devshell/flake.nix`](./examples/devshell/flake.nix).
 
 Now `nix develop` will automatically install skills to your project directory.
 
+The hook prints one line per installed target. Under direnv the hook is
+re-evaluated on every shell entry, so pass `quiet = true;` to `mkShellHook` to
+drop those lines; warnings and failures still go to stderr. `AGENT_SKILLS_QUIET=1`
+does the same for any synchronization program at runtime.
+
 ## Symlinks inside skills
 
 Symlinks inside skill directories are kept when their textual target stays inside the declared source root (e.g. `../shared` to a sibling at the root). Symlinks whose target escapes the root are dropped, along with any links left dangling by that drop.
