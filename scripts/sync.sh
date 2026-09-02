@@ -14,6 +14,16 @@ warn() {
   printf '%s: %s\n' "$PROGRAM_NAME" "$*" >&2
 }
 
+# Progress lines are printed on every synchronization, so a devShell hook run
+# from direnv repeats them at every shell entry. Quiet mode drops those lines
+# only; warnings and failures keep their stderr output.
+quiet() {
+  case "${AGENT_SKILLS_QUIET:-}" in
+    1 | true | yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
@@ -316,7 +326,7 @@ sync_destination() {
       ;;
   esac
 
-  printf '%s: installed %s to %s\n' "$PROGRAM_NAME" "$target_name" "$destination"
+  quiet || printf '%s: installed %s to %s\n' "$PROGRAM_NAME" "$target_name" "$destination"
 }
 
 [ "$#" -eq 1 ] || die "usage: sync.sh CONFIG_JSON_PATH"

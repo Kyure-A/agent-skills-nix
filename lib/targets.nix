@@ -187,12 +187,15 @@ let
 
   # Create a shellHook string for use in devShells.
   # Automatically installs skills when entering the dev shell.
-  mkShellHook = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns }:
+  # Set quiet when the shell is entered often, e.g. through direnv, where the
+  # per-target progress lines would otherwise print at every shell entry;
+  # warnings and failures still reach stderr.
+  mkShellHook = { pkgs, bundle, targets ? defaultLocalTargets, excludePatterns ? defaultExcludePatterns, quiet ? false }:
     let
       installProgram = mkLocalInstallProgram { inherit pkgs bundle targets excludePatterns; };
     in
     ''
-      ${installProgram}/bin/skills-install-local
+      ${lib.optionalString quiet "AGENT_SKILLS_QUIET=1 "}${installProgram}/bin/skills-install-local
     '';
 in
 {
