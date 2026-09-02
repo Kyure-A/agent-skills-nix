@@ -234,7 +234,8 @@ pkgs.runCommand "agent-skills-agent-plugin-test"
     test -f "$skill/.fixture-config"
     grep -Fx 'preserve-dotfiles=true' "$skill/.fixture-config"
     test -x "$skill/scripts/greet.sh"
-    "$skill/scripts/greet.sh" | grep -Fx 'hello from the portable plugin fixture'
+    ${pkgs.bash}/bin/bash "$skill/scripts/greet.sh" \
+      | grep -Fx 'hello from the portable plugin fixture'
 
     # The source-root-relative symlink is useful input structure, but the plugin
     # output must be independently installable and contain no symlinks.
