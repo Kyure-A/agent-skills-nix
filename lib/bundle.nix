@@ -1,4 +1,4 @@
-{ lib, sources }:
+{ lib, sources, selectionLib }:
 
 let
   inherit (builtins)
@@ -101,7 +101,30 @@ let
   # Materialize bundle in the store, preserving nested paths.
   mkBundle = { pkgs, selection, name ? "agent-skills-bundle" }:
     let
-      skills = map (id: selection.${id} // { inherit id; }) (attrNames selection);
+      skills = map
+        (id: selection.${id} // {
+          inherit id;
+          agents = selectionLib.agentsFor id selection.${id};
+        })
+        (attrNames selection);
+      hasTargetRestrictions = lib.any (skill: skill.agents != null) skills;
+      skillTargetNames = unique (concatMap (skill: if skill.agents == null then [ ] else skill.agents) skills);
+      # Share materialized skills (including transforms and dependencies) across
+      # targets instead of dumping and sanitizing the same sources for each one.
+      forTarget = target:
+        let
+          allowed = builtins.filter (skill: skill.agents == null || builtins.elem target skill.agents) skills;
+        in
+        if builtins.length allowed == builtins.length skills then result
+        else
+          pkgs.runCommand "${name}-filtered" { preferLocalBuild = true; } ''
+            mkdir -p "$out"
+            ${concatMapStringsSep "\n" (skill: ''
+              dest=${lib.escapeShellArg skill.id}
+              mkdir -p "$out/$(dirname "$dest")"
+              ln -s ${lib.escapeShellArg "${result}/${skill.id}"} "$out/$dest"
+            '') allowed}
+          '';
       # --safe-links drops symlinks whose textual target escapes the root;
       # the find pass cleans up chains left dangling by that drop (a -> b -> outside where b was already removed).
       mkSafeSourceRoot = storePath: key:
@@ -211,11 +234,16 @@ let
             ln -s ${lib.escapeShellArg skillPath} "$out/$dest"
           '')
         skills;
+      result = pkgs.runCommand name
+        {
+          preferLocalBuild = true;
+          passthru = { inherit forTarget hasTargetRestrictions skillTargetNames; };
+        } ''
+        mkdir -p "$out"
+        ${buildCommands}
+      '';
     in
-    pkgs.runCommand name { preferLocalBuild = true; } ''
-      mkdir -p "$out"
-      ${buildCommands}
-    '';
+    result;
 in
 {
   inherit

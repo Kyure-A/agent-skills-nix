@@ -3,7 +3,7 @@
 let
   sources = import ./sources.nix { inherit lib inputs; };
   selection = import ./selection.nix { inherit lib sources; };
-  bundle = import ./bundle.nix { inherit lib sources; };
+  bundle = import ./bundle.nix { inherit lib sources; selectionLib = selection; };
   agentPlugin = import ./agent-plugin.nix { inherit lib sources; };
   targets = import ./targets.nix { inherit lib; };
   sourceRegistry = import ./source-registry.nix { inherit lib; };
@@ -32,6 +32,7 @@ in
     mkAgentPlugin
     ;
   inherit (targets)
+    bundlesForTargets
     defaultExcludePatterns
     defaultLocalTargets
     defaultTargets

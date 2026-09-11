@@ -105,6 +105,22 @@ let
   # The leading "/" ensures only the top-level .system is excluded, not .system dirs inside skills.
   defaultExcludePatterns = [ "/.system" ];
 
+  # Validate names against the complete configured target set, even when a
+  # target is disabled or excluded on this system, then build active views.
+  bundlesForTargets = { bundle, targets, system }:
+    let
+      hasBundleMetadata = builtins.isAttrs bundle;
+      knownTargetNames = builtins.attrNames (defaultTargets // targets);
+      unknownTargetNames = builtins.filter
+        (name: !(builtins.elem name knownTargetNames))
+        (if hasBundleMetadata then bundle.skillTargetNames or [ ] else [ ]);
+    in
+    assert lib.assertMsg (unknownTargetNames == [ ])
+      "agent-skills: unknown skill agents target(s): ${lib.concatStringsSep ", " unknownTargetNames}; use a built-in target name or define a matching targets attribute";
+    lib.mapAttrs
+      (name: _: if hasBundleMetadata && bundle ? forTarget then bundle.forTarget name else bundle)
+      (targetsFor { inherit targets system; });
+
   # Build an executable that delegates synchronization to the shared runtime.
   # Nix is responsible only for filtering targets and serializing configuration;
   # destination expansion and filesystem safety checks happen at runtime.
@@ -122,14 +138,17 @@ let
     ,
     }:
     let
+      hasBundleMetadata = builtins.isAttrs bundle;
+      targetBundles = bundlesForTargets { inherit bundle targets system; };
       activeTargets = targetsFor { inherit targets system; };
       config = {
-        schemaVersion = 1;
+        schemaVersion = 2;
         inherit mode excludePatterns;
         bundle = "${bundle}";
         targets = lib.mapAttrsToList
           (name: target: {
             inherit name;
+            bundle = "${targetBundles.${name}}";
             structure = target.structure or (if mode == "local" then "copy-tree" else "symlink-tree");
             dest = target.dest;
           })
@@ -138,21 +157,25 @@ let
           enabled = allowOverrides;
           envVar = overrideEnvVar;
           structure = overrideStructure;
+          hasTargetRestrictions = if hasBundleMetadata then bundle.hasTargetRestrictions or false else false;
         };
       };
       configFile = pkgs.writeText "${programName}-config.json" (builtins.toJSON config);
     in
-    pkgs.writeShellApplication {
-      name = programName;
-      runtimeInputs = [
-        pkgs.coreutils
-        pkgs.jq
-        pkgs.rsync
-      ];
-      text = ''
-        exec ${pkgs.bash}/bin/bash ${../scripts/sync.sh} ${configFile} "$@"
-      '';
-    };
+    # Force validation even when no targets are active.
+    builtins.seq targetBundles
+      pkgs.writeShellApplication
+      {
+        name = programName;
+        runtimeInputs = [
+          pkgs.coreutils
+          pkgs.jq
+          pkgs.rsync
+        ];
+        text = ''
+          exec ${pkgs.bash}/bin/bash ${../scripts/sync.sh} ${configFile} "$@"
+        '';
+      };
 
   # Project-local synchronization uses the same runtime with local path guards
   # and the established local override environment variables.
@@ -200,6 +223,7 @@ let
 in
 {
   inherit
+    bundlesForTargets
     defaultExcludePatterns
     defaultLocalTargets
     defaultTargets

@@ -120,7 +120,7 @@ canonical_destination() {
 
 assert_safe_common_destination() {
   local path="$1"
-  local home_path="" home_resolved=""
+  local home_path="" home_resolved="" source_bundle
 
   [ "$path" != "/" ] || die "refusing to synchronize to /"
   if [ -n "${HOME:-}" ]; then
@@ -135,12 +135,14 @@ assert_safe_common_destination() {
     /nix/store | /nix/store/*) die "refusing to synchronize inside /nix/store: $path" ;;
   esac
 
-  case "$bundle_path/" in
-    "$path/"*) die "destination contains the bundle: $path" ;;
-  esac
-  case "$path/" in
-    "$bundle_path/"*) die "destination is inside the bundle: $path" ;;
-  esac
+  for source_bundle in "${resolved_bundle_paths[@]}"; do
+    case "$source_bundle/" in
+      "$path/"*) die "destination contains the bundle: $path" ;;
+    esac
+    case "$path/" in
+      "$source_bundle/"*) die "destination is inside the bundle: $path" ;;
+    esac
+  done
 }
 
 resolve_local_destination() {
@@ -246,6 +248,7 @@ write_marker() {
   local destination="$1"
   local target_name="$2"
   local structure="$3"
+  local bundle_path="$4"
   local marker="$destination/$MARKER_NAME"
   local temporary="$destination/.${MARKER_NAME}.tmp.$$"
 
@@ -295,6 +298,7 @@ sync_destination() {
   local destination="$1"
   local structure="$2"
   local target_name="$3"
+  local bundle_path="$4"
   local -a rsync_args
 
   case "$structure" in
@@ -313,7 +317,7 @@ sync_destination() {
       ensure_writable_tree "$destination"
       # Claim ownership before rsync so an interrupted first synchronization
       # can be retried without requiring AGENT_SKILLS_FORCE.
-      write_marker "$destination" "$target_name" "$structure"
+      write_marker "$destination" "$target_name" "$structure" "$bundle_path"
       rsync_args=(-a --delete --filter "P /$MARKER_NAME" --exclude "/$MARKER_NAME")
       if [ "$structure" = "copy-tree" ]; then
         rsync_args+=(-L)
@@ -347,13 +351,14 @@ jq -e '
     . == "link" or . == "symlink-tree" or . == "copy-tree";
   type == "object" and
   ((keys - ["bundle", "excludePatterns", "mode", "overrides", "schemaVersion", "targets"]) | length == 0) and
-  .schemaVersion == 1 and
+  .schemaVersion == 2 and
   (.mode == "local" or .mode == "global") and
   (.bundle | safe_text and length > 0) and
   (.targets | type == "array") and
   (.targets | all(.[];
     type == "object" and
-    ((keys - ["dest", "name", "structure"]) | length == 0) and
+    ((keys - ["bundle", "dest", "name", "structure"]) | length == 0) and
+    (.bundle | safe_text and length > 0) and
     (.name | safe_text and length > 0) and
     (.dest | safe_text and length > 0) and
     (.structure | type == "string" and structure)
@@ -361,16 +366,15 @@ jq -e '
   ((.targets | map(.name) | unique | length) == (.targets | length)) and
   (.excludePatterns | type == "array" and all(.[]; safe_text)) and
   (.overrides | type == "object") and
-  (.overrides | ((keys - ["enabled", "envVar", "structure"]) | length == 0)) and
+  (.overrides | ((keys - ["enabled", "envVar", "hasTargetRestrictions", "structure"]) | length == 0)) and
   (.overrides.enabled | type == "boolean") and
+  (.overrides.hasTargetRestrictions | type == "boolean") and
   (.overrides.envVar | safe_text and test("^[A-Za-z_][A-Za-z0-9_]*$")) and
   (.overrides.structure | type == "string" and structure)
 ' "$config_path" >/dev/null || die "invalid configuration in $config_path"
 
 mode="$(jq -r '.mode' "$config_path")"
 bundle="$(jq -r '.bundle' "$config_path")"
-[ -d "$bundle" ] || die "bundle directory not found: $bundle"
-bundle_path="$(realpath -- "$bundle")" || die "could not resolve bundle: $bundle"
 
 local_root=""
 if [ "$mode" = "local" ]; then
@@ -388,6 +392,9 @@ overrides=()
 if [ "$override_enabled" = "true" ]; then
   override_raw="$(printenv "$override_env_var" 2>/dev/null || true)"
   if [ -n "$override_raw" ]; then
+    if [ "$(jq -r '.overrides.hasTargetRestrictions' "$config_path")" = "true" ]; then
+      die "$override_env_var cannot be used with per-skill agents restrictions; configure named targets.<name>.dest instead"
+    fi
     IFS=$' \t\n' read -r -a overrides <<<"$override_raw"
   fi
 fi
@@ -395,6 +402,7 @@ fi
 target_names=()
 target_structures=()
 target_destinations=()
+target_bundles=()
 
 if [ "$mode" = "global" ] && [ "${#overrides[@]}" -gt 0 ]; then
   index=0
@@ -402,6 +410,7 @@ if [ "$mode" = "global" ] && [ "${#overrides[@]}" -gt 0 ]; then
     target_names+=("override-$index")
     target_structures+=("$override_structure")
     target_destinations+=("$destination")
+    target_bundles+=("$bundle")
     index=$((index + 1))
   done
 else
@@ -411,12 +420,14 @@ else
     target_name="$(jq -r --argjson index "$index" '.targets[$index].name' "$config_path")"
     target_structure="$(jq -r --argjson index "$index" '.targets[$index].structure' "$config_path")"
     target_destination="$(jq -r --argjson index "$index" '.targets[$index].dest' "$config_path")"
+    target_bundle="$(jq -r --argjson index "$index" '.targets[$index].bundle' "$config_path")"
     if [ "$mode" = "local" ] && [ "$index" -lt "${#overrides[@]}" ]; then
       target_destination="${overrides[$index]}"
     fi
     target_names+=("$target_name")
     target_structures+=("$target_structure")
     target_destinations+=("$target_destination")
+    target_bundles+=("$target_bundle")
     index=$((index + 1))
   done
 
@@ -426,10 +437,20 @@ else
       target_names+=("override-$index")
       target_structures+=("copy-tree")
       target_destinations+=("${overrides[$index]}")
+      target_bundles+=("$bundle")
       index=$((index + 1))
     done
   fi
 fi
+
+# Resolve all sources before any destination checks or changes. Destination
+# guards compare against every source, including sources for other targets.
+resolved_bundle_paths=()
+for source_bundle in "$bundle" "${target_bundles[@]}"; do
+  [ -d "$source_bundle" ] || die "bundle directory not found: $source_bundle"
+  resolved_bundle="$(realpath -- "$source_bundle")" || die "could not resolve bundle: $source_bundle"
+  resolved_bundle_paths+=("$resolved_bundle")
+done
 
 # Resolve and authorize every target before changing any destination. Also
 # reject equal or nested destinations, whose --delete operations would race.
@@ -461,6 +482,7 @@ while [ "$index" -lt "${#target_names[@]}" ]; do
   sync_destination \
     "${resolved_destinations[$index]}" \
     "${target_structures[$index]}" \
-    "${target_names[$index]}"
+    "${target_names[$index]}" \
+    "${resolved_bundle_paths[$((index + 1))]}"
   index=$((index + 1))
 done
