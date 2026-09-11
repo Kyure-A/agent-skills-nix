@@ -24,6 +24,15 @@ let
     resolveSourceRoot
     ;
 
+  # null means unrestricted; an explicit empty allowlist selects no targets.
+  agentsFor = name: skill:
+    let agents = skill.agents or null;
+    in
+    if agents == null then null
+    else if !isList agents || !(lib.all (agent: builtins.isString agent && agent != "") agents) then
+      throw "agent-skills: skill ${name} agents must be null or a list of non-empty target names"
+    else unique agents;
+
   # Build allowlist from enableAll + explicit enable list.
   allowlistFor = { catalog, sources, enableAll ? false, enable ? [ ] }:
     let
@@ -100,6 +109,7 @@ let
             transform = cfg.transform or null;
             rewriteCommands = if cfg ? rewriteCommands then cfg.rewriteCommands else true;
             packages = cfg.packages or [ ];
+            agents = agentsFor name cfg;
           }
         )
         explicit;
@@ -115,5 +125,5 @@ let
       fromExplicit;
 in
 {
-  inherit allowlistFor selectSkills;
+  inherit agentsFor allowlistFor selectSkills;
 }

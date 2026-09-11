@@ -27,6 +27,14 @@
     inherit pkgs agentLib;
   };
 
+  skill-targets = import ./skill-targets.nix {
+    inherit pkgs agentLib;
+  };
+
+  skill-target-runtime = import ./skill-target-runtime.nix {
+    inherit pkgs agentLib;
+  };
+
   local-install-script = import ./local-install-script.nix {
     inherit pkgs agentLib;
   };

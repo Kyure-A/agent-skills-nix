@@ -6,7 +6,7 @@ Declarative management of Agent Skills (directories containing `SKILL.md`) with 
 
 - **sources**: Named inputs or paths pointing at a skills root (`subdir`). They can be written directly as before, or generated from the optional source registry. Optional `idPrefix` namespaces discovered skill IDs to avoid collisions across sources.
 - **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
-- **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones; no accidental auto-install unless you opt in.
+- **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones. Explicit skills can restrict installation to named targets with `agents`; no accidental auto-install unless you opt in.
 - **Agent Plugin export**: Maps selected catalog entries to portable skill names and produces a self-contained, skills-only plugin directory.
 - **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). Runtime destinations support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms without general shell evaluation. See **Default target paths** below.
 
@@ -161,13 +161,13 @@ Notes:
 ## Flake outputs
 
 - `packages.<system>.agent-skills-bundle`: Store bundle of selected skills (empty by default; configure in consumers).
-- `apps.<system>.skills-install`: Sync bundle to enabled global targets (see **Default target paths**). Override destinations with `AGENT_SKILLS_DESTS`.
-- `apps.<system>.skills-install-local`: Sync bundle to enabled local targets (see **Default target paths**) using `copy-tree`. Override root with `AGENT_SKILLS_ROOT`, destinations with `AGENT_SKILLS_LOCAL_DESTS`.
+- `apps.<system>.skills-install`: Sync selected skills to enabled global targets (see **Default target paths**). Unrestricted bundles support destination overrides with `AGENT_SKILLS_DESTS`.
+- `apps.<system>.skills-install-local`: Sync selected skills to enabled local targets (see **Default target paths**) using `copy-tree`. Override root with `AGENT_SKILLS_ROOT`; unrestricted bundles support destination overrides with `AGENT_SKILLS_LOCAL_DESTS`.
 - `apps.<system>.skills-list`: JSON view of the default catalog.
 - `apps.<system>.skills-sources-lock`: Resolve `registry/sources/*.nix` and atomically update `registry/sources.lock.json`.
 - `checks.<system>.skills`: Sanity check that the bundle builds.
 - `homeManagerModules.default`: Home Manager module implementing the DSL above.
-- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `mkAgentPlugin`, `loadSourceManifests`, `sourcesFromLock`, `mkSourceLockProgram`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
+- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `bundlesForTargets`, `mkAgentPlugin`, `loadSourceManifests`, `sourcesFromLock`, `mkSourceLockProgram`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
 
 ## Development structure
 
@@ -210,6 +210,17 @@ builds the updater used by the `skills-sources-lock` app.
 
 `mkSyncProgram` returns a `skills-install` executable after filtering enabled targets for the requested system. `mkLocalInstallProgram` is its project-local wrapper and returns `skills-install-local`. Both serialize a versioned JSON configuration and invoke the shared synchronization runtime; they do not return inline shell source. Existing consumer flakes can continue using `mkSyncScript` and `mkLocalInstallScript`; these compatibility wrappers preserve their original return types while delegating to the shared runtime. `mkShellHook` runs the local program from a development shell.
 
+`mkBundle { inherit pkgs selection; }` builds the full selection and exposes
+`bundle.forTarget "claude"` for a bundle filtered by each skill's `agents` list.
+Pass the bundle derivation directly to `mkSyncProgram`, `mkLocalInstallProgram`,
+or `mkShellHook` to apply that filtering automatically for each named target.
+`bundlesForTargets { inherit bundle targets system; }` validates the target
+names and returns the filtered bundles for enabled targets on that system.
+A plain store path does not carry selection metadata. Home Manager exposes
+the full selection as `programs.agent-skills.bundlePath` and the filtered
+bundles for enabled targets on the current system as
+`programs.agent-skills.targetBundlePaths`.
+
 ## Agent Plugin export (experimental)
 
 `mkAgentPlugin` turns an explicit map of selected skills into a skills-only
@@ -237,7 +248,9 @@ plugin = agentLib.mkAgentPlugin {
 The attribute names in `skills` become the exported skill directory names.
 This explicit mapping flattens catalog IDs such as `openai/pdf` into portable
 names such as `pdf`; the matching `SKILL.md` frontmatter must use that same
-name. The exporter adds `"skills": "./skills/"` to the manifest.
+name. The exporter adds `"skills": "./skills/"` to the manifest. Per-skill
+`agents` restrictions do not filter plugin exports; the explicit export map
+determines their contents.
 
 The initial exporter deliberately supports skills only. A selected skill with
 `packages` or a `transform` is rejected because those bundle features can
@@ -255,6 +268,51 @@ must follow the Agent Skills naming and description rules, and cannot set
 `disable-model-invocation` to `true`.
 
 ## Skill customisation
+
+### Install skills only for selected agents
+
+Set `agents` on an explicit skill to choose the named targets that receive it:
+
+```nix
+programs.agent-skills = {
+  targets.claude.enable = true;
+  targets.codex.enable = true;
+  targets.pi.enable = true;
+
+  skills.explicit = {
+    writing = {
+      from = "my-source";
+      agents = [ "claude" "codex" ];
+    };
+    pi-tools = {
+      from = "my-source";
+      agents = [ "pi" ];
+    };
+    shared = {
+      from = "my-source";
+    };
+  };
+};
+```
+
+Here `writing` goes to Claude and Codex, `pi-tools` goes to Pi, and `shared`
+goes to all three. Omitted `agents` or `agents = null;` allows every enabled
+target on the current system; `agents = [];` installs the skill nowhere while
+keeping it in the full bundle. Skills selected through `skills.enable` or
+`skills.enableAll` also go to every enabled target.
+
+Names match `targets` attribute keys, including custom targets, regardless of
+their `dest` paths. Listing a target never enables it or overrides its `systems`
+filter. Unknown names fail evaluation when constructing the install programs;
+known but disabled targets, or targets for another system, are allowed.
+
+These restrictions apply to Home Manager links and activation, global and
+local install programs, and dev-shell hooks. If any selected skill has a
+non-null `agents` list, `AGENT_SKILLS_DESTS` and `AGENT_SKILLS_LOCAL_DESTS`
+overrides are rejected because those paths do not identify a target. Configure
+`targets.<name>.dest` to change destinations while keeping target names.
+
+### Transform content and bundle dependencies
 
 Explicit skills support `transform` and `packages` options to customise SKILL.md and bundle dependencies:
 
@@ -286,13 +344,13 @@ Package binaries are referenced with local paths (`./jq` or `./pkg/` for multi-b
 ### Global skills (Home Manager)
 
 - List catalog: `nix run .#skills-list`
-- Sync bundle to `$HOME`: `nix run .#skills-install` (override destinations via `AGENT_SKILLS_DESTS="~/tmp/skills1 ~/tmp/skills2"`)
+- Sync bundle to `$HOME`: `nix run .#skills-install` (for unrestricted bundles, override destinations via `AGENT_SKILLS_DESTS="~/tmp/skills1 ~/tmp/skills2"`)
 
 ### Local skills (project-local)
 
 - Sync bundle to current directory: `nix run .#skills-install-local`
 
-Local skills are installed to enabled local targets in **Default target paths** relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). Override destinations via `AGENT_SKILLS_LOCAL_DESTS`.
+Local skills are installed to enabled local targets in **Default target paths** relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). For unrestricted bundles, override destinations via `AGENT_SKILLS_LOCAL_DESTS`; with `agents` restrictions, configure named targets' `dest` values instead.
 Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallProgram`.
 The synchronizer refuses to replace a non-empty, unmarked directory. A successful tree sync records ownership in `.agent-skills-managed.json`; set `AGENT_SKILLS_FORCE=1` only when you intentionally want agent-skills to take over an existing destination.
 

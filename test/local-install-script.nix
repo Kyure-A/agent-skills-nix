@@ -115,7 +115,16 @@ pkgs.runCommand "agent-skills-sync-program-integration-test" { } ''
   # The static runtime rejects unknown config schema versions before touching
   # any destination.
   invalid_config="$PWD/invalid-config.json"
-  printf '{"schemaVersion":2}\n' > "$invalid_config"
+  cat > "$invalid_config" <<'JSON'
+  {
+    "schemaVersion": 999,
+    "mode": "local",
+    "bundle": "${testBundle}",
+    "targets": [],
+    "excludePatterns": [],
+    "overrides": {"enabled": false, "envVar": "UNUSED", "structure": "copy-tree", "hasTargetRestrictions": false}
+  }
+  JSON
   if PATH=${pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.jq pkgs.rsync ]} \
     ${pkgs.bash}/bin/bash ${../scripts/sync.sh} "$invalid_config" \
     > "$PWD/invalid-config.log" 2>&1; then
