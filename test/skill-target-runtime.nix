@@ -25,6 +25,11 @@ let
     };
   };
   initialBundle = mkBundle { };
+  matchingBundle = mkBundle {
+    codex-only.agents = [ "claude" "codex" ];
+    claude-only.agents = [ "claude" "codex" ];
+    shared.agents = [ "custom" ];
+  };
   changedBundle = mkBundle {
     codex-only.agents = [ "claude" ];
     claude-only.agents = [ ];
@@ -45,6 +50,19 @@ let
     targets = targetsForMode mode;
     allowOverrides = true;
     programName = "skills-routing-test";
+  };
+  sharedDestinationProgram = mode: bundle: agentLib.mkSyncProgram {
+    inherit pkgs mode bundle;
+    targets = targetsForMode mode // {
+      before = {
+        dest = if mode == "local" then "before" else "$HOME/before";
+        structure = "copy-tree";
+      };
+    } // lib.genAttrs [ "claude" "codex" ] (_: {
+      dest = if mode == "local" then "shared" else "$HOME/shared";
+      structure = "copy-tree";
+    });
+    programName = "skills-routing-shared-test";
   };
   invalidProgram = agentLib.mkSyncProgram {
     inherit pkgs;
@@ -73,6 +91,8 @@ pkgs.runCommand "agent-skills-target-runtime-test"
     ${lib.concatMapStringsSep "\n" (mode: let
       initialProgram = mkProgram mode initialBundle;
       changedProgram = mkProgram mode changedBundle;
+      conflictingProgram = sharedDestinationProgram mode initialBundle;
+      matchingProgram = sharedDestinationProgram mode matchingBundle;
       overrideVar = if mode == "local" then "AGENT_SKILLS_LOCAL_DESTS" else "AGENT_SKILLS_DESTS";
     in ''
       root="$PWD/${mode}"
@@ -130,6 +150,40 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test ! -e "$reject_root/claude"
       test ! -e "$reject_root/codex"
       test ! -e "$reject_root/custom"
+
+      # Named targets can share a destination only when their filtered bundles
+      # agree. Reject a later conflict before changing any earlier target.
+      conflict_root="$PWD/${mode}-conflicting-bundles"
+      mkdir -p "$conflict_root/shared"
+      echo keep > "$conflict_root/shared/SENTINEL"
+      if HOME="$conflict_root" AGENT_SKILLS_ROOT="$conflict_root" AGENT_SKILLS_FORCE=1 \
+        ${conflictingProgram}/bin/skills-routing-shared-test > conflict.log 2>&1; then
+        fail "${mode}: shared destination accepted distinct restricted bundles"
+      fi
+      grep -F 'conflicting bundles for destination' conflict.log
+      test "$(cat "$conflict_root/shared/SENTINEL")" = keep
+      test ! -e "$conflict_root/shared/.agent-skills-managed.json"
+      test ! -e "$conflict_root/before"
+      test ! -e "$conflict_root/custom"
+
+      # Identical filtered bundles still merge and retain the first name in
+      # the marker, including when the existing destination is synchronized.
+      matching_root="$PWD/${mode}-matching-bundles"
+      mkdir -p "$matching_root"
+      for run in initial repeated; do
+        HOME="$matching_root" AGENT_SKILLS_ROOT="$matching_root" \
+          ${matchingProgram}/bin/skills-routing-shared-test > matching.log 2>&1
+        test "$(grep -c "installed .* to $matching_root/shared$" matching.log)" = 1 \
+          || fail "${mode}: identical restricted bundles did not synchronize once"
+      done
+      test -f "$matching_root/shared/common/SKILL.md"
+      test -f "$matching_root/shared/claude-only/SKILL.md"
+      test -f "$matching_root/shared/codex-only/SKILL.md"
+      test ! -e "$matching_root/shared/custom-only"
+      test ! -e "$matching_root/shared/shared"
+      jq -e --arg bundle '${matchingBundle.forTarget "claude"}' \
+        '.bundle == $bundle and .target == "claude"' \
+        "$matching_root/shared/.agent-skills-managed.json" >/dev/null
     '') [ "local" "global" ]}
 
     # The complete set of source paths is checked before the first target
@@ -165,6 +219,20 @@ pkgs.runCommand "agent-skills-target-runtime-test"
     grep -F 'destination contains the bundle' preflight.log
     test "$(cat "$preflight_root/source-two/SENTINEL")" = keep
     test ! -e "$preflight_root/second"
+
+    # Canonical source aliases compare equal and the marker records the
+    # resolved source, so spelling differences cannot cause false conflicts.
+    ln -s "$preflight_root/source-one" "$preflight_root/source-alias"
+    echo content > "$preflight_root/source-one/CONTENT"
+    make_config "$preflight_root/source-alias" shared
+    jq '.targets[1].dest = "shared"' "$preflight_root/config.json" > "$preflight_root/aliases.json"
+    AGENT_SKILLS_ROOT="$preflight_root" ${pkgs.bash}/bin/bash \
+      ${../scripts/sync.sh} "$preflight_root/aliases.json" > aliases.log 2>&1
+    test "$(grep -c 'installed .* to ' aliases.log)" = 1
+    test "$(cat "$preflight_root/shared/CONTENT")" = content
+    jq -e --arg bundle "$preflight_root/source-one" \
+      '.bundle == $bundle and .target == "first"' \
+      "$preflight_root/shared/.agent-skills-managed.json" >/dev/null
 
     plain_root="$PWD/plain-root"
     mkdir -p "$plain_root"

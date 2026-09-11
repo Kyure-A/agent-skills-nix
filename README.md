@@ -366,6 +366,23 @@ Package binaries are referenced with local paths (`./jq` or `./pkg/` for multi-b
 
 Local skills are installed to enabled local targets in **Default target paths** relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). For unrestricted bundles, override destinations via `AGENT_SKILLS_LOCAL_DESTS`; with `agents` restrictions, configure named targets' `dest` values instead.
 Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallProgram`.
+
+Synchronization builds and validates the complete execution plan before
+changing any destination. Targets with the same resolved destination,
+structure, and bundle synchronize once (for example, local `agents` and
+`antigravity` when their selected skills match);
+the first target's name is used for the ownership marker and progress message.
+Different structures or bundles at one destination, or destinations nested
+inside each other, are rejected before synchronization starts.
+
+For unrestricted bundles, destination overrides are separated by spaces, tabs,
+or newlines. Global
+overrides replace the entire target list. Local overrides replace destinations
+in target-name order, retaining each matched target's structure; remaining
+targets keep their configured destinations. Additional overrides use
+`overrideStructure` (`copy-tree` for `mkLocalInstallProgram`). Use configured
+targets for destinations containing whitespace.
+
 The synchronizer refuses to replace a non-empty, unmarked directory. A successful tree sync records ownership in `.agent-skills-managed.json`; set `AGENT_SKILLS_FORCE=1` only when you intentionally want agent-skills to take over an existing destination.
 
 Both apps operate on the flake's default (empty) config; point at your own flake/module for real catalogs.

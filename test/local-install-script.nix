@@ -4,6 +4,7 @@
 let
   markerName = ".agent-skills-managed.json";
   specialDest = "special dir/quote'\"/$(touch PWNED)/skills";
+  invalidGlobalFallback = "\${AGENT_SKILLS_TEST_UNSET:-unsupported}";
 
   testSources = {
     test-skill = {
@@ -72,6 +73,27 @@ let
         enable = true;
         systems = [ ];
       };
+    };
+  };
+
+  sharedDestinationProgram = agentLib.mkLocalInstallProgram {
+    inherit pkgs;
+    bundle = testBundle;
+    targets = {
+      agents = agentLib.defaultLocalTargets.agents // { enable = true; };
+      antigravity = agentLib.defaultLocalTargets.antigravity // { enable = true; };
+    };
+  };
+
+  localOverrideProgram = agentLib.mkSyncProgram {
+    inherit pkgs;
+    bundle = testBundle;
+    mode = "local";
+    allowOverrides = true;
+    overrideStructure = "link";
+    targets = {
+      first = { dest = "first/skills"; structure = "copy-tree"; };
+      second = { dest = "second/skills"; structure = "symlink-tree"; };
     };
   };
 
@@ -284,6 +306,133 @@ pkgs.runCommand "agent-skills-sync-program-integration-test" { } ''
   test "$(cat "$preflight_root/second/skills/SENTINEL")" = "do-not-delete" \
     || fail "preflight failure modified the unsafe destination"
 
+  # A nested path-resolution failure must propagate through the complete plan.
+  # Reject a later escaping local target before installing an earlier safe one.
+  unsafe_local_root="$PWD/unsafe-local-plan/root"
+  mkdir -p "$unsafe_local_root"
+  if AGENT_SKILLS_ROOT="$unsafe_local_root" \
+    AGENT_SKILLS_LOCAL_DESTS="safe/skills ../escaped" \
+    "${preflightProgram}/bin/skills-install-local" \
+    > "$PWD/unsafe-local-plan.log" 2>&1; then
+    fail "a later unsafe local destination should reject the execution plan"
+  fi
+  grep -q 'escapes the project root' "$PWD/unsafe-local-plan.log" \
+    || fail "later local destination did not report the path-resolution failure"
+  test ! -e "$unsafe_local_root/safe" \
+    && test ! -e "$unsafe_local_root/../escaped" \
+    || fail "local path-resolution failure partially synchronized the plan"
+
+  # A failed fallback cannot become a valid destination just because its suffix
+  # is absolute. All potential destinations stay inside the build directory.
+  invalid_global_root="$PWD/invalid-global-fallback"
+  mkdir -p "$invalid_global_root"
+  invalid_fallback=${pkgs.lib.escapeShellArg invalidGlobalFallback}"$invalid_global_root/fallback"
+  unset AGENT_SKILLS_TEST_UNSET
+  if HOME="$invalid_global_root" \
+    AGENT_SKILLS_DESTS="$invalid_global_root/safe $invalid_fallback" \
+    "${symlinkProgram}/bin/skills-sync-test" \
+    > "$PWD/invalid-global-fallback.log" 2>&1; then
+    fail "an invalid global fallback should reject the execution plan"
+  fi
+  grep -q 'unsupported HOME expression' "$PWD/invalid-global-fallback.log" \
+    || fail "invalid fallback did not report the expansion failure"
+  test ! -e "$invalid_global_root/safe" && test ! -e "$invalid_global_root/fallback" \
+    || fail "global fallback failure partially synchronized the plan"
+
+  # The default agents and antigravity targets share one layout and should
+  # synchronize their common destination once, including on repeated runs.
+  shared_root="$PWD/shared-destination"
+  mkdir -p "$shared_root"
+  for run in initial repeated; do
+    AGENT_SKILLS_ROOT="$shared_root" \
+      "${sharedDestinationProgram}/bin/skills-install-local" \
+      > "$PWD/shared-$run.log" 2>&1 || {
+      cat "$PWD/shared-$run.log" >&2
+      fail "default agents and antigravity targets should synchronize together"
+    }
+    test "$(grep -c 'installed .* to ' "$PWD/shared-$run.log")" = 1 \
+      || fail "shared destination should synchronize only once"
+  done
+  test -f "$shared_root/.agents/skills/test-skill/SKILL.md" \
+    || fail "shared default destination is missing the skill"
+  "${pkgs.jq}/bin/jq" -e '.target == "agents" and .structure == "copy-tree"' \
+    "$shared_root/.agents/skills/${markerName}" >/dev/null \
+    || fail "shared destination should retain the first target ownership marker"
+
+  # Duplicate detection uses canonical destinations, including lexical aliases.
+  AGENT_SKILLS_ROOT="$shared_root" \
+    AGENT_SKILLS_LOCAL_DESTS=".agents/skills .agents/./skills" \
+    "${sharedDestinationProgram}/bin/skills-install-local" \
+    > "$PWD/shared-alias.log" 2>&1 || {
+    cat "$PWD/shared-alias.log" >&2
+    fail "equivalent destination spellings should merge"
+  }
+  test "$(grep -c 'installed .* to ' "$PWD/shared-alias.log")" = 1 \
+    || fail "canonical destination aliases should synchronize only once"
+
+  # Local overrides are positional: unmatched targets keep their defaults.
+  partial_root="$PWD/partial-local-overrides"
+  mkdir -p "$partial_root"
+  AGENT_SKILLS_ROOT="$partial_root" AGENT_SKILLS_LOCAL_DESTS="changed/skills" \
+    "${localOverrideProgram}/bin/skills-install-local"
+  test -d "$partial_root/changed/skills/test-skill" \
+    && test ! -L "$partial_root/changed/skills/test-skill" \
+    || fail "local override should retain the first target copy-tree structure"
+  test -L "$partial_root/second/skills/test-skill" \
+    || fail "unmatched local target should retain its destination and structure"
+  test ! -e "$partial_root/first" \
+    || fail "local override should replace its positional destination"
+
+  # Overrides accept all documented whitespace separators. Extra local
+  # destinations use overrideStructure rather than a hard-coded copy-tree.
+  extra_root="$PWD/extra-local-overrides"
+  mkdir -p "$extra_root"
+  AGENT_SKILLS_ROOT="$extra_root" \
+    AGENT_SKILLS_LOCAL_DESTS=$'one/skills\ttwo/skills\nthree/skills' \
+    "${localOverrideProgram}/bin/skills-install-local"
+  test ! -L "$extra_root/one/skills/test-skill" \
+    && test -f "$extra_root/one/skills/test-skill/SKILL.md" \
+    || fail "first positional override lost copy-tree structure"
+  test -L "$extra_root/two/skills/test-skill" \
+    || fail "second positional override lost symlink-tree structure"
+  test -L "$extra_root/three/skills" \
+    && test "$(readlink "$extra_root/three/skills")" = "${testBundle}" \
+    || fail "extra local override did not use the configured link structure"
+  test ! -e "$extra_root/first" && test ! -e "$extra_root/second" \
+    || fail "local overrides should replace all matched destinations"
+
+  # Conflicting structures for an exact destination and nested destinations
+  # must fail before an earlier, unrelated destination is installed.
+  conflict_root="$PWD/conflicting-structures"
+  mkdir -p "$conflict_root"
+  if AGENT_SKILLS_ROOT="$conflict_root" \
+    AGENT_SKILLS_LOCAL_DESTS="safe/skills shared/skills shared/./skills" \
+    "${localOverrideProgram}/bin/skills-install-local" \
+    > "$PWD/conflicting-structures.log" 2>&1; then
+    fail "shared destination with conflicting structures should be rejected"
+  fi
+  grep -q 'conflicting structures' "$PWD/conflicting-structures.log" \
+    || fail "conflicting destination was not rejected by structure validation"
+  test ! -e "$conflict_root/safe" && test ! -e "$conflict_root/shared" \
+    || fail "structure conflict partially synchronized the execution plan"
+
+  for nested_overrides in \
+    'safe/skills parent parent/child' \
+    'safe/skills parent/child parent'; do
+    nested_root="$PWD/nested-destinations"
+    mkdir -p "$nested_root"
+    if AGENT_SKILLS_ROOT="$nested_root" \
+      AGENT_SKILLS_LOCAL_DESTS="$nested_overrides" \
+      "${localOverrideProgram}/bin/skills-install-local" \
+      > "$PWD/nested-destinations.log" 2>&1; then
+      fail "nested destinations should be rejected in either target order"
+    fi
+    grep -q 'destinations overlap' "$PWD/nested-destinations.log" \
+      || fail "nested destination was not rejected by overlap validation"
+    test ! -e "$nested_root/safe" && test ! -e "$nested_root/parent" \
+      || fail "nested destinations partially synchronized the execution plan"
+  done
+
   # Force explicitly opts into replacing the unmanaged destination.
   (
     cd "$unmanaged"
@@ -421,6 +570,20 @@ pkgs.runCommand "agent-skills-sync-program-integration-test" { } ''
     HOME="$symlink_root" "${symlinkProgram}/bin/skills-sync-test"
   test -L "$override_root/skills/test-skill" \
     || fail "global destination override was not synchronized"
+
+  # Global overrides replace the entire configured target set, and every
+  # override uses the configured override structure.
+  global_many_root="$PWD/global-many-overrides"
+  global_many_home="$PWD/global-many-home"
+  mkdir -p "$global_many_root" "$global_many_home"
+  unset AGENT_SKILLS_TEST_HOME
+  AGENT_SKILLS_DESTS="$global_many_root/first $global_many_root/second" \
+    HOME="$global_many_home" "${symlinkProgram}/bin/skills-sync-test"
+  test -L "$global_many_root/first/test-skill" \
+    && test -L "$global_many_root/second/test-skill" \
+    || fail "multiple global overrides did not synchronize every destination"
+  test ! -e "$global_many_home/sync" \
+    || fail "global overrides should replace all configured targets"
 
   mkdir -p "$out"
   touch "$out/ok"

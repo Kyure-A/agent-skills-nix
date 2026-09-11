@@ -112,8 +112,8 @@ canonical_destination() {
     printf '/\n'
     return 0
   fi
-  parent="$(dirname -- "$lexical")"
-  leaf="$(basename -- "$lexical")"
+  parent="$(dirname -- "$lexical")" || return 1
+  leaf="$(basename -- "$lexical")" || return 1
   resolved_parent="$(realpath -m -- "$parent")" || return 1
   realpath -m -s -- "$resolved_parent/$leaf"
 }
@@ -161,8 +161,8 @@ resolve_local_destination() {
     *) die "local destination escapes the project root: $raw" ;;
   esac
 
-  parent="$(dirname -- "$lexical")"
-  leaf="$(basename -- "$lexical")"
+  parent="$(dirname -- "$lexical")" || return 1
+  leaf="$(basename -- "$lexical")" || return 1
   resolved_parent="$(realpath -m -- "$parent")" || die "could not resolve local destination parent: $raw"
   resolved="$(realpath -m -s -- "$resolved_parent/$leaf")" || die "could not resolve local destination: $raw"
   [ "$resolved" != "$local_root" ] || die "local destination must not be the project root: $raw"
@@ -171,7 +171,7 @@ resolve_local_destination() {
     *) die "local destination escapes the project root through a symlink: $raw" ;;
   esac
 
-  assert_safe_common_destination "$resolved"
+  assert_safe_common_destination "$resolved" || return 1
   printf '%s\n' "$resolved"
 }
 
@@ -193,7 +193,7 @@ expand_global_destination() {
   [ -n "$raw" ] || die "global destination must not be empty"
   case "$raw" in
     \$HOME | \$HOME/*)
-      result="$(expand_home_path "$raw")"
+      result="$(expand_home_path "$raw")" || return 1
       ;;
     \$\{*)
       after_open="${raw:2}"
@@ -217,7 +217,8 @@ expand_global_destination() {
       if variable_value="$(printenv "$variable" 2>/dev/null)" && [ -n "$variable_value" ]; then
         result="$variable_value$suffix"
       else
-        result="$(expand_home_path "$fallback")$suffix"
+        result="$(expand_home_path "$fallback")" || return 1
+        result="$result$suffix"
       fi
       ;;
     \~)
@@ -276,6 +277,8 @@ check_overwrite_permission() {
   die "$destination exists and is non-empty but has no $MARKER_NAME marker; set AGENT_SKILLS_FORCE=1 to replace it"
 }
 
+# Command substitutions and conditional callers can disable errexit. Path
+# resolution must propagate failures explicitly before returning a destination.
 prepare_destination() {
   local raw_destination="$1"
   local structure="$2"
@@ -284,13 +287,13 @@ prepare_destination() {
 
   is_structure "$structure" || die "unknown structure '$structure' for target '$target_name'"
   if [ "$mode" = "local" ]; then
-    destination="$(resolve_local_destination "$raw_destination")"
+    destination="$(resolve_local_destination "$raw_destination")" || return 1
   else
-    destination="$(expand_global_destination "$raw_destination")"
-    assert_safe_common_destination "$destination"
+    destination="$(expand_global_destination "$raw_destination")" || return 1
+    assert_safe_common_destination "$destination" || return 1
   fi
 
-  check_overwrite_permission "$destination"
+  check_overwrite_permission "$destination" || return 1
   printf '%s\n' "$destination"
 }
 
@@ -331,6 +334,118 @@ sync_destination() {
   esac
 
   quiet || printf '%s: installed %s to %s\n' "$PROGRAM_NAME" "$target_name" "$destination"
+}
+
+# Global overrides replace the configured targets. Local overrides replace
+# destinations by target position, retaining each target's structure; extra
+# destinations use the configured override structure in either mode.
+build_target_plan() {
+  local override_raw="" override_env_var
+
+  if jq -e '.overrides.enabled' "$config_path" >/dev/null; then
+    override_env_var="$(jq -r '.overrides.envVar' "$config_path")"
+    override_raw="$(printenv "$override_env_var" 2>/dev/null || true)"
+    if [ -n "$override_raw" ] && jq -e '.overrides.hasTargetRestrictions' "$config_path" >/dev/null; then
+      die "$override_env_var cannot be used with per-skill agents restrictions; configure named targets.<name>.dest instead"
+    fi
+  fi
+
+  jq -c --arg overrideRaw "$override_raw" '
+    . as $config |
+    [$overrideRaw | scan("[^ \t\n]+")] as $overrides |
+    [.targets[] | {name, structure, destination: .dest, bundle}] as $targets |
+    def added_override($index): {
+      name: "override-\($index)",
+      structure: $config.overrides.structure,
+      destination: $overrides[$index],
+      bundle: $config.bundle
+    };
+    if .mode == "global" and ($overrides | length) > 0 then
+      [range(0; $overrides | length) | added_override(.)]
+    elif .mode == "local" then
+      [$targets | to_entries[] |
+        .key as $index | .value |
+        .destination = ($overrides[$index] // .destination)
+      ] + [range($targets | length; $overrides | length) | added_override(.)]
+    else
+      $targets
+    end
+  ' "$config_path"
+}
+
+resolve_bundle_path() {
+  local source_bundle="$1"
+
+  [ -d "$source_bundle" ] || die "bundle directory not found: $source_bundle"
+  realpath -- "$source_bundle" || die "could not resolve bundle: $source_bundle"
+}
+
+# Resolve every source before inspecting destinations, so overlap guards also
+# protect the sources used by other targets.
+resolve_bundle_plan() {
+  local plan="$1"
+  local target resolved_bundle
+
+  while IFS= read -r target; do
+    resolved_bundle="$(resolve_bundle_path "$(jq -r '.bundle' <<<"$target")")" || return 1
+    jq -c --arg bundle "$resolved_bundle" '.bundle = $bundle' <<<"$target" || return 1
+  done < <(jq -c '.[]' <<<"$plan")
+}
+
+# Resolve and authorize every destination before any synchronization starts.
+# Emit one JSON record per target, preserving literal path characters.
+resolve_target_plan() {
+  local plan="$1"
+  local target destination
+
+  while IFS= read -r target; do
+    destination="$(prepare_destination \
+      "$(jq -r '.destination' <<<"$target")" \
+      "$(jq -r '.structure' <<<"$target")" \
+      "$(jq -r '.name' <<<"$target")")" || return 1
+    jq -c --arg destination "$destination" '.destination = $destination' <<<"$target" || return 1
+  done < <(jq -c '.[]' <<<"$plan")
+}
+
+# Targets sharing a canonical destination can synchronize once when their
+# structures and bundles match. Keep the first target's name for a stable marker.
+# Different bundles or structures and nested destinations cannot synchronize together.
+merge_target_plan() {
+  jq -c '
+    reduce .[] as $target ([];
+      if any(.[];
+        .destination == $target.destination and .structure != $target.structure
+      ) then
+        error("conflicting structures for destination: \($target.destination)")
+      elif any(.[];
+        .destination == $target.destination and .bundle != $target.bundle
+      ) then
+        error("conflicting bundles for destination: \($target.destination)")
+      elif any(.[];
+        (.destination | startswith($target.destination + "/")) or
+        (.destination as $existing | $target.destination | startswith($existing + "/"))
+      ) then
+        error("destinations overlap: \($target.destination)")
+      elif any(.[]; .destination == $target.destination) then
+        .
+      else
+        . + [$target]
+      end
+    )
+  ' <<<"$1"
+}
+
+execute_target_plan() {
+  local plan="$1"
+  local target
+
+  while IFS= read -r target; do
+    sync_destination \
+      "$(jq -r '.destination' <<<"$target")" \
+      "$(jq -r '.structure' <<<"$target")" \
+      "$(jq -r '.name' <<<"$target")" \
+      "$(jq -r '.bundle' <<<"$target")"
+  done < <(jq -c '.[]' <<<"$plan")
 }
 
 [ "$#" -eq 1 ] || die "usage: sync.sh CONFIG_JSON_PATH"
@@ -384,105 +499,13 @@ if [ "$mode" = "local" ]; then
   [ "$local_root" != "/" ] || die "local root must not be /"
 fi
 
-override_enabled="$(jq -r '.overrides.enabled' "$config_path")"
-override_env_var="$(jq -r '.overrides.envVar' "$config_path")"
-override_structure="$(jq -r '.overrides.structure' "$config_path")"
-override_raw=""
-overrides=()
-if [ "$override_enabled" = "true" ]; then
-  override_raw="$(printenv "$override_env_var" 2>/dev/null || true)"
-  if [ -n "$override_raw" ]; then
-    if [ "$(jq -r '.overrides.hasTargetRestrictions' "$config_path")" = "true" ]; then
-      die "$override_env_var cannot be used with per-skill agents restrictions; configure named targets.<name>.dest instead"
-    fi
-    IFS=$' \t\n' read -r -a overrides <<<"$override_raw"
-  fi
-fi
-
-target_names=()
-target_structures=()
-target_destinations=()
-target_bundles=()
-
-if [ "$mode" = "global" ] && [ "${#overrides[@]}" -gt 0 ]; then
-  index=0
-  for destination in "${overrides[@]}"; do
-    target_names+=("override-$index")
-    target_structures+=("$override_structure")
-    target_destinations+=("$destination")
-    target_bundles+=("$bundle")
-    index=$((index + 1))
-  done
-else
-  target_count="$(jq '.targets | length' "$config_path")"
-  index=0
-  while [ "$index" -lt "$target_count" ]; do
-    target_name="$(jq -r --argjson index "$index" '.targets[$index].name' "$config_path")"
-    target_structure="$(jq -r --argjson index "$index" '.targets[$index].structure' "$config_path")"
-    target_destination="$(jq -r --argjson index "$index" '.targets[$index].dest' "$config_path")"
-    target_bundle="$(jq -r --argjson index "$index" '.targets[$index].bundle' "$config_path")"
-    if [ "$mode" = "local" ] && [ "$index" -lt "${#overrides[@]}" ]; then
-      target_destination="${overrides[$index]}"
-    fi
-    target_names+=("$target_name")
-    target_structures+=("$target_structure")
-    target_destinations+=("$target_destination")
-    target_bundles+=("$target_bundle")
-    index=$((index + 1))
-  done
-
-  if [ "$mode" = "local" ] && [ "${#overrides[@]}" -gt "$target_count" ]; then
-    index="$target_count"
-    while [ "$index" -lt "${#overrides[@]}" ]; do
-      target_names+=("override-$index")
-      target_structures+=("copy-tree")
-      target_destinations+=("${overrides[$index]}")
-      target_bundles+=("$bundle")
-      index=$((index + 1))
-    done
-  fi
-fi
-
-# Resolve all sources before any destination checks or changes. Destination
-# guards compare against every source, including sources for other targets.
-resolved_bundle_paths=()
-for source_bundle in "$bundle" "${target_bundles[@]}"; do
-  [ -d "$source_bundle" ] || die "bundle directory not found: $source_bundle"
-  resolved_bundle="$(realpath -- "$source_bundle")" || die "could not resolve bundle: $source_bundle"
+plan="$(build_target_plan)"
+bundle_path="$(resolve_bundle_path "$bundle")"
+plan="$(resolve_bundle_plan "$plan" | jq -sc '.')"
+resolved_bundle_paths=("$bundle_path")
+while IFS= read -r resolved_bundle; do
   resolved_bundle_paths+=("$resolved_bundle")
-done
-
-# Resolve and authorize every target before changing any destination. Also
-# reject equal or nested destinations, whose --delete operations would race.
-resolved_destinations=()
-index=0
-while [ "$index" -lt "${#target_names[@]}" ]; do
-  destination="$(prepare_destination \
-    "${target_destinations[$index]}" \
-    "${target_structures[$index]}" \
-    "${target_names[$index]}")"
-  for existing_destination in "${resolved_destinations[@]}"; do
-    case "$destination/" in
-      "$existing_destination/"*)
-        die "destinations overlap: $existing_destination and $destination"
-        ;;
-    esac
-    case "$existing_destination/" in
-      "$destination/"*)
-        die "destinations overlap: $destination and $existing_destination"
-        ;;
-    esac
-  done
-  resolved_destinations+=("$destination")
-  index=$((index + 1))
-done
-
-index=0
-while [ "$index" -lt "${#target_names[@]}" ]; do
-  sync_destination \
-    "${resolved_destinations[$index]}" \
-    "${target_structures[$index]}" \
-    "${target_names[$index]}" \
-    "${resolved_bundle_paths[$((index + 1))]}"
-  index=$((index + 1))
-done
+done < <(jq -r '.[].bundle' <<<"$plan")
+plan="$(resolve_target_plan "$plan" | jq -sc '.')"
+plan="$(merge_target_plan "$plan")"
+execute_target_plan "$plan"
