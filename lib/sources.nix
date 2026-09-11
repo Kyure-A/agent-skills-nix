@@ -1,6 +1,9 @@
 { lib, inputs }:
 
 let
+  sourceConfig = import ./source-config.nix { inherit lib; };
+  inherit (sourceConfig) assertOnlyKeys assertSafeRelPath assertSkillId normalizeSourceConfig normalizeSources;
+
   inherit (builtins)
     attrNames
     hashString
@@ -14,24 +17,6 @@ let
     concatMap
     ;
 
-  inherit (lib.strings)
-    hasInfix
-    hasPrefix
-    hasSuffix
-    ;
-
-  isUnsafeRelPath = rel:
-    hasPrefix "/" rel
-    || rel == ".."
-    || hasPrefix "../" rel
-    || hasInfix "/../" rel
-    || hasSuffix "/.." rel;
-
-  assertSafeRelPath = ctx: rel:
-    if isUnsafeRelPath rel then
-      throw "agent-skills: ${ctx} '${rel}' must be relative and must not traverse outside the source root"
-    else rel;
-
   # Resolve the root path for a source, preferring an explicit path and
   # falling back to a flake input name.
   resolveSourceRoot = name: cfg:
@@ -41,28 +26,18 @@ let
       else throw "agent-skills: source ${name} refers to unknown input ${cfg.input}"
     else throw "agent-skills: source ${name} must set either `path` or `input`";
 
-  # Validate skill IDs so we do not create unsafe paths.
-  assertSkillId = id:
-    if hasPrefix "/" id || hasInfix ".." id then
-      throw "agent-skills: invalid skill id ${id} (must not start with '/' or contain '..')"
-    else id;
+  sourcePathFor = name: value:
+    let
+      cfg = normalizeSourceConfig name value;
+      root = resolveSourceRoot name cfg;
+      path = if cfg.subdir == "." then root else root + "/${cfg.subdir}";
+    in
+    if !pathExists path then
+      throw "agent-skills: source ${name} subdir ${toString path} does not exist"
+    else path;
 
   prefixSkillId = prefix: baseId:
-    let
-      validatedBaseId = assertSkillId baseId;
-      validatedPrefix =
-        if prefix == null || prefix == "" then null
-        else
-          let checkedPrefix = assertSkillId prefix;
-          in
-          if hasSuffix "/" checkedPrefix then
-            throw "agent-skills: invalid source idPrefix ${checkedPrefix} (must not end with '/')"
-          else checkedPrefix;
-    in
-    assertSkillId (
-      if validatedPrefix == null then validatedBaseId
-      else "${validatedPrefix}/${validatedBaseId}"
-    );
+    assertSkillId (if prefix == null then baseId else "${prefix}/${baseId}");
 
   appendRelPath = root: rel:
     if rel == "" || rel == "." then "${root}" else "${root}/${rel}";
@@ -90,16 +65,9 @@ let
   # null = unlimited (capped internally at 100 to guard against symlink loops).
   discoverSource = name: cfg:
     let
-      subdir = assertSafeRelPath "source ${name} subdir" (cfg.subdir or ".");
-      skillsRoot' = resolveSourceRoot name cfg + "/${subdir}";
-      skillsRoot =
-        if !pathExists skillsRoot' then
-          throw "agent-skills: source ${name} subdir ${toString skillsRoot'} does not exist"
-        else skillsRoot';
-
-      idPrefix = cfg.idPrefix or null;
-      maxDepth = cfg.filter.maxDepth or null;
-      nameRegex = cfg.filter.nameRegex or null;
+      skillsRoot = sourcePathFor name cfg;
+      inherit (cfg) idPrefix;
+      inherit (cfg.filter) maxDepth nameRegex;
 
       scan = path: relParts: depth:
         let
@@ -157,7 +125,7 @@ let
           acc
           local;
     in
-    lib.attrsets.foldlAttrs addSource { } sources;
+    lib.attrsets.foldlAttrs addSource { } (normalizeSources sources);
 
   # Render catalog in a stable, JSON-friendly form.
   catalogJson = catalog:
@@ -173,11 +141,14 @@ in
 {
   inherit
     appendRelPath
+    assertOnlyKeys
     assertSafeRelPath
     assertSkillId
     catalogJson
     discoverCatalog
+    normalizeSources
     resolveSourceRoot
+    sourcePathFor
     sourceRelPathFor
     sourceRootFor
     sourceRootKey

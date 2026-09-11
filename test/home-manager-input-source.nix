@@ -8,7 +8,7 @@ let
     };
   };
 
-  config = hmLib.homeManagerConfiguration {
+  mkConfig = extra: hmLib.homeManagerConfiguration {
     inherit pkgs;
     modules = [
       agentSkillsModule
@@ -26,9 +26,18 @@ let
           targets.claude.enable = true;
         };
       }
+      extra
     ];
     extraSpecialArgs = { inputs = fixtureInputs; };
   };
+
+  config = mkConfig {
+    programs.agent-skills = {
+      sources.fixture.filter.maxDepth = 0;
+    };
+  };
+  invalidConfig = extra: !(builtins.tryEval
+    (builtins.attrNames (mkConfig extra).config.programs.agent-skills.catalog)).success;
 
   bundle = config.config.programs.agent-skills.bundlePath;
   activation = config.config.home.activation.agent-skills.data;
@@ -49,7 +58,8 @@ in
 assert _assertBundle;
 assert _assertCatalog;
 assert _assertActivation;
-pkgs.runCommand "agent-skills-home-manager-input-source-test" {} ''
+assert invalidConfig { programs.agent-skills.sources.fixture.idPrefix = "invalid/"; };
+pkgs.runCommand "agent-skills-home-manager-input-source-test" { } ''
   mkdir -p "$out"
   touch "$out/ok"
 ''

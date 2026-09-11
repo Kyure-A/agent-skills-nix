@@ -1,13 +1,15 @@
 { lib }:
 
 let
+  sourceConfig = import ./source-config.nix { inherit lib; };
+  inherit (sourceConfig) assertOnlyKeys normalizeDiscoveryConfig;
+
   inherit (builtins)
     attrNames
     filter
     fromJSON
     isAttrs
     isBool
-    isInt
     isString
     match
     pathExists
@@ -16,15 +18,6 @@ let
     stringLength
     substring
     ;
-
-  assertOnlyKeys = context: allowed: value:
-    let
-      unknown = filter (name: !(builtins.elem name allowed)) (attrNames value);
-    in
-    if unknown == [ ] then
-      value
-    else
-      throw "agent-skills: ${context} has unknown fields: ${lib.concatStringsSep ", " unknown}";
 
   requireNonEmptyString = context: value:
     if isString value && value != "" then
@@ -133,22 +126,6 @@ let
     else
       throw "agent-skills: ${context}.type '${type}' is unsupported (expected git, github, or tarball)";
 
-  validateFilter = name: value:
-    let
-      context = "source manifest ${name}.filter";
-      filterValue =
-        if isAttrs value then
-          assertOnlyKeys context [ "maxDepth" "nameRegex" ] value
-        else
-          throw "agent-skills: ${context} must be an attribute set";
-      maxDepth = filterValue.maxDepth or null;
-      nameRegex = optionalString "${context}.nameRegex" (filterValue.nameRegex or null);
-    in
-    if maxDepth != null && (!isInt maxDepth || maxDepth < 0) then
-      throw "agent-skills: ${context}.maxDepth must be null or a non-negative integer"
-    else
-      { inherit maxDepth nameRegex; };
-
   validateManifest = name: value:
     let
       context = "source manifest ${name}";
@@ -157,27 +134,13 @@ let
           assertOnlyKeys context [ "filter" "idPrefix" "pin" "subdir" ] value
         else
           throw "agent-skills: ${context} must evaluate to an attribute set";
-      subdir = manifest.subdir or ".";
-      idPrefix = optionalString "${context}.idPrefix" (manifest.idPrefix or null);
-      filterValue = validateFilter name (manifest.filter or { });
-      unsafeSubdir =
-        !isString subdir
-        || lib.hasPrefix "/" subdir
-        || subdir == ".."
-        || lib.hasPrefix "../" subdir
-        || lib.hasInfix "/../" subdir
-        || lib.hasSuffix "/.." subdir;
+      normalized = normalizeDiscoveryConfig context (builtins.removeAttrs manifest [ "pin" ]) // {
+        pin = validatePin name manifest.pin;
+      };
     in
     if !(manifest ? pin) then
       throw "agent-skills: ${context} must define pin"
-    else if unsafeSubdir then
-      throw "agent-skills: ${context}.subdir must be relative and must not traverse outside the source root"
-    else
-      {
-        filter = filterValue;
-        inherit idPrefix subdir;
-        pin = validatePin name manifest.pin;
-      };
+    else builtins.deepSeq normalized normalized;
 
   manifestName = fileName:
     substring 0 (stringLength fileName - 4) fileName;
@@ -206,8 +169,9 @@ let
             inherit name;
             value = validateManifest name (import (manifestsDir + "/${fileName}"));
           };
+      manifests = builtins.listToAttrs (map load files);
     in
-    builtins.listToAttrs (map load files);
+    builtins.deepSeq manifests manifests;
 
   gitRepositoryUrl = name: repository:
     let

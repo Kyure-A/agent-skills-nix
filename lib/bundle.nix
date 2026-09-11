@@ -26,8 +26,8 @@ let
   # Get binary info for a package (name, store path, and whether it has multiple binaries)
   getPkgBinInfo = pkg:
     let
-      _ =
-        if builtins.isDerivation pkg then true
+      validPackage =
+        if lib.isDerivation pkg then true
         else throw "agent-skills: packages entries must be derivations, got ${builtins.typeOf pkg}";
       name = pkg.pname or pkg.name or "unknown";
       binDir = "${pkg}/bin";
@@ -40,6 +40,7 @@ let
       # Only use single binary if it exists AND is the only binary
       useSingleBin = hasSingleBin && binCount == 1;
     in
+    assert validPackage;
     {
       inherit name;
       path = if useSingleBin then singleBin else if hasBinDir then binDir else "${pkg}";

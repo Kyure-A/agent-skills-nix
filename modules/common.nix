@@ -64,7 +64,7 @@ let
       path = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = null;
-        description = "Local path fallback instead of `input`.";
+        description = "Source path; takes precedence over `input` when both are set.";
       };
 
       subdir = lib.mkOption {
@@ -81,9 +81,9 @@ let
 
       filter = {
         maxDepth = lib.mkOption {
-          type = lib.types.nullOr lib.types.ints.positive;
+          type = lib.types.nullOr lib.types.ints.unsigned;
           default = null;
-          description = "Recursion depth when discovering SKILL.md directories. 1 = immediate children only, 2 = one level of nesting, null = unlimited (capped at 100).";
+          description = "Recursion depth when discovering SKILL.md directories. 0 = source root only, 1 = immediate children, 2 = one level of nesting, null = unlimited (capped at 100).";
         };
 
         nameRegex = lib.mkOption {

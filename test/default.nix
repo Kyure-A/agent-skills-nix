@@ -15,6 +15,14 @@
     inherit pkgs agentLib;
   };
 
+  source-config = import ./source-config.nix {
+    inherit pkgs agentLib;
+  };
+
+  selection = import ./selection.nix {
+    inherit pkgs agentLib;
+  };
+
   agent-plugin = import ./agent-plugin.nix {
     inherit pkgs agentLib;
   };
