@@ -103,11 +103,10 @@ let
   mkBundle = { pkgs, selection, name ? "agent-skills-bundle" }:
     let
       skills = map
-        (id: selection.${id} // {
-          inherit id;
-          agents = selectionLib.agentsFor id selection.${id};
+        (skill: skill // {
+          agents = selectionLib.agentsFor skill.id skill;
         })
-        (attrNames selection);
+        (builtins.attrValues selection);
       hasTargetRestrictions = lib.any (skill: skill.agents != null) skills;
       skillTargetNames = unique (concatMap (skill: if skill.agents == null then [ ] else skill.agents) skills);
       # Share materialized skills (including transforms and dependencies) across

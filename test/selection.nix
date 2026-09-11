@@ -57,13 +57,28 @@ let
     invalid-agents-entry = skillRejected { agents = [ null ]; };
     empty-agents-entry = skillRejected { agents = [ "" ]; };
     invalid-package-info = rejected (builtins.attrNames (agentLib.getPkgBinInfo { outPath = ./fixtures/test-skill; }));
+    rename-allowlist-collision = selectionRejected {
+      allowlist = [ "fixture" ];
+      skills.example = baseSkill // { rename = "fixture"; };
+    };
+    rename-explicit-collision = selectionRejected {
+      skills.first = baseSkill // { rename = "shared"; };
+      skills.second = baseSkill // { rename = "shared"; };
+    };
+    null-rename-collision = selectionRejected {
+      allowlist = [ "fixture" ];
+      skills.fixture = baseSkill // { rename = null; };
+    };
   };
   failedChecks = builtins.attrNames (lib.filterAttrs (_: passed: !passed) failures);
 
+  # An explicit declaration may use an allowlisted key when its final ID is
+  # different. Both the attribute name and record ID must retain the rename.
   selection = select {
     allowlist = [ "fixture" "fixture" ];
     skills = {
-      example = baseSkill;
+      fixture = baseSkill // { rename = "renamed/skill"; agents = [ "codex" ]; };
+      null-name = baseSkill // { rename = null; };
       disabled.enable = false;
     };
   };
@@ -90,14 +105,18 @@ assert lib.assertMsg (failedChecks == [ ])
 assert allowlist { enableAll = true; enable = [ "fixture" ]; } == [ "fixture" ];
 assert allowlist { enableAll = [ "fixture" ]; } == [ "fixture" ];
 assert allowlist { } == [ ];
-assert ids == [ "example" "fixture" ];
+assert ids == [ "fixture" "null-name" "renamed/skill" ];
 assert lib.all (id: selection.${id}.id == id) ids;
+assert selection."renamed/skill".agents == [ "codex" ];
 assert builtins.attrNames lazyPackageSelection == [ "lazy" ];
 assert subdirSelection.example.sourceRelPath == "skill-1";
 assert toString subdirSelection.example.sourceRoot == toString (./fixtures/nested-skills + "/cat-a");
 pkgs.runCommand "agent-skills-selection-test" { } ''
   cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/fixture/SKILL.md
-  cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/example/SKILL.md
+  cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/renamed/skill/SKILL.md
+  cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/null-name/SKILL.md
+  test -f ${bundle.forTarget "codex"}/renamed/skill/SKILL.md
+  test ! -e ${bundle.forTarget "claude"}/renamed/skill
   test ! -e ${bundle}/disabled
   mkdir -p "$out"
   touch "$out/ok"

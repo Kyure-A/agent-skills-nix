@@ -209,7 +209,12 @@ See [`examples/library-functions/snippet.nix`](./examples/library-functions/snip
 `discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). Set `idPrefix` on a source to namespace discovered IDs (for example, `openai/pdf`). It enforces `SKILL.md` presence and rejects duplicate IDs after prefixing (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
 
 Selection validates enabled declarations before returning its result, including
-unknown source names in `enableAll` and invalid transforms or packages.
+unknown source names in `enableAll` and invalid transforms or packages. Explicit
+skills use `rename` as their final output ID; an omitted or `null` rename uses
+the declaration's name. Selection keys and entry IDs always match. Collisions
+are checked after renaming, both against discovered selections and between
+explicit skills. For example, `skills.explicit.original = { from = "local";
+path = "pdf"; rename = "documents/pdf"; };` installs to `documents/pdf/`.
 
 `loadSourceManifests` loads, validates, and normalizes a directory of per-source
 Nix manifests. `sourcesFromLock` verifies them against an agent-skills

@@ -34,6 +34,10 @@ let
   config = mkConfig {
     programs.agent-skills = {
       sources.fixture.filter.maxDepth = 0;
+      skills.explicit = {
+        original = { from = "fixture"; path = "."; };
+        renamed = { from = "fixture"; path = "."; rename = "nested/output"; };
+      };
     };
   };
   invalidConfig = extra: !(builtins.tryEval
@@ -60,6 +64,9 @@ assert _assertCatalog;
 assert _assertActivation;
 assert invalidConfig { programs.agent-skills.sources.fixture.idPrefix = "invalid/"; };
 pkgs.runCommand "agent-skills-home-manager-input-source-test" { } ''
+  test -f ${bundle}/original/SKILL.md
+  test -f ${bundle}/nested/output/SKILL.md
+  test ! -e ${bundle}/renamed
   mkdir -p "$out"
   touch "$out/ok"
 ''

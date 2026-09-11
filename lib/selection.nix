@@ -80,7 +80,7 @@ let
     );
 
   # Disabled declarations need no source, but their enable flag must still be
-  # well-typed. Enabled declarations become validated skill records.
+  # well-typed. Enabled declarations become complete records with a final ID.
   normalizeExplicit = sourceConfigs: name: value:
     let
       cfg = assertOnlyKeys "skill ${name}" [
@@ -154,16 +154,17 @@ let
           in skill // { inherit id; }
         )
         ids;
-      explicit = lib.filterAttrs (_: skill: skill != null)
-        (lib.mapAttrs (normalizeExplicit sourceConfigs) checkedSkills);
-      addSkill = acc: id: skill:
+      explicit = filter (skill: skill != null)
+        (lib.mapAttrsToList (normalizeExplicit sourceConfigs) checkedSkills);
+      addSkill = acc: skill:
+        let inherit (skill) id;
+        in
         if hasAttr id acc then
           throw "agent-skills: skill id collision for ${id}"
-        else acc // { ${id} = skill // { inherit id; }; };
-      selectedCatalog = lib.listToAttrs (map (skill: { name = skill.id; value = skill; }) allowlisted);
+        else acc // { ${id} = skill; };
     in
     builtins.seq sourceConfigs (
-      builtins.seq checkedCatalog (lib.foldlAttrs addSkill selectedCatalog explicit)
+      builtins.seq checkedCatalog (builtins.foldl' addSkill { } (allowlisted ++ explicit))
     );
 in
 {
