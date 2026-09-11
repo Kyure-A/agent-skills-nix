@@ -171,7 +171,30 @@ Notes:
 
 ## Development structure
 
-The root `flake.nix` only declares inputs and invokes [Blueprint](https://github.com/numtide/blueprint). Blueprint discovers packages, checks, and the public library under `nix/`; `nix/flake-outputs.nix` projects those pieces onto the existing public output names and wires the apps and Home Manager module. Runtime and domain logic remain in `scripts/`, `lib/`, `modules/`, and `test/`.
+The root `flake.nix` depends only on nixpkgs and explicitly wires the library,
+packages, apps, checks, and Home Manager module with ordinary Nix imports.
+Build and app definitions live under `nix/`; runtime and domain logic live in
+`scripts/`, `lib/`, `modules/`, and `test/`.
+
+Home Manager is a test-only dependency declared in `test/flake.nix`. That flake
+tests the root flake through a relative path input and follows its nixpkgs input,
+so consumers do not inherit a Home Manager dependency.
+
+Run both check suites from the repository root:
+
+```console
+nix flake check
+nix flake check ./test
+```
+
+To update dependencies, update the root lock first, then the test lock:
+
+```console
+nix flake update
+nix flake update --flake ./test
+```
+
+CI runs both suites, and the dependency update workflow updates both lock files.
 
 ## Library functions
 

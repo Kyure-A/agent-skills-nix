@@ -20,10 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/setup-nix
-      - name: Update flake.lock
-        run: nix flake update
+      - name: Update flake locks
+        run: |
+          nix flake update
+          nix flake update --flake ./test
       - name: Run flake check
-        run: nix flake check
+        run: |
+          nix flake check
+          nix flake check ./test
       - name: Create pull request
         uses: peter-evans/create-pull-request@84ae59a2cdc2258d6fa0732dd66352dddae2a412 # v7.0.9
         with:
@@ -36,4 +40,6 @@ jobs:
           base: master
           delete-branch: true
           labels: dependencies,automated
-          add-paths: flake.lock
+          add-paths: |
+            flake.lock
+            test/flake.lock

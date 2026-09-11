@@ -1,7 +1,6 @@
-{ flake, pkgs, ... }:
+{ agentLib, pkgs }:
 
 let
-  agentLib = flake.lib.agent-skills;
   config = agentLib.defaultConfig;
   catalog = agentLib.discoverCatalog config.sources;
   allowlist = agentLib.allowlistFor {

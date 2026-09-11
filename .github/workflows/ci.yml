@@ -18,3 +18,5 @@ jobs:
           git diff --exit-code
       - name: Run flake check
         run: nix flake check --print-build-logs
+      - name: Run Home Manager integration tests
+        run: nix flake check ./test --print-build-logs

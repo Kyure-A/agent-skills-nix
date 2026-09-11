@@ -1,13 +1,11 @@
 # Checks for agent-skills
 { pkgs
 , agentLib
-, hmLib
-, agentSkillsModule
 , bundle
 }:
 
 {
-  skills = pkgs.runCommand "agent-skills-checks" {} ''
+  skills = pkgs.runCommand "agent-skills-checks" { } ''
     test -d ${bundle}
     mkdir -p "$out"
     touch "$out/ok"
@@ -33,9 +31,10 @@
     inherit pkgs agentLib;
   };
 
-  sync-shellcheck = pkgs.runCommand "agent-skills-sync-shellcheck" {
-    nativeBuildInputs = [ pkgs.shellcheck ];
-  } ''
+  sync-shellcheck = pkgs.runCommand "agent-skills-sync-shellcheck"
+    {
+      nativeBuildInputs = [ pkgs.shellcheck ];
+    } ''
     shellcheck ${../scripts/sync.sh}
     mkdir -p "$out"
   '';
@@ -44,9 +43,10 @@
     inherit pkgs agentLib bundle;
   };
 
-  source-lock-shellcheck = pkgs.runCommand "agent-skills-source-lock-shellcheck" {
-    nativeBuildInputs = [ pkgs.shellcheck ];
-  } ''
+  source-lock-shellcheck = pkgs.runCommand "agent-skills-source-lock-shellcheck"
+    {
+      nativeBuildInputs = [ pkgs.shellcheck ];
+    } ''
     shellcheck \
       ${../scripts/source-lock.sh} \
       ${./fixtures/source-registry/fake-npins.sh} \
@@ -60,13 +60,5 @@
 
   source-registry-npins-local = import ./source-registry-npins-local.nix {
     inherit pkgs agentLib;
-  };
-
-  home-manager-warnings = import ./home-manager-warnings.nix {
-    inherit pkgs hmLib agentSkillsModule;
-  };
-
-  home-manager-input-source = import ./home-manager-input-source.nix {
-    inherit pkgs hmLib agentSkillsModule;
   };
 }
