@@ -27,7 +27,12 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
     test "${agentLib.defaultLocalTargets.${name}.dest}" != "" || { echo "Missing local dest for ${name}"; exit 1; }
     test "${agentLib.defaultLocalTargets.${name}.structure}" = "copy-tree" || { echo "Wrong local structure for ${name}"; exit 1; }
     test "${if agentLib.defaultLocalTargets.${name}.enable then "true" else "false"}" = "false" || { echo "Expected local ${name}.enable=false by default"; exit 1; }
-  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi"]}
+  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi" "oh-my-pi"]}
+
+  test '${agentLib.defaultLocalTargets.oh-my-pi.dest}' = '.omp/skills' || {
+    echo "Unexpected default local oh-my-pi.dest"
+    exit 1
+  }
 
   test "${agentLib.defaultLocalTargets.antigravity.dest}" = ".agents/skills" || {
     echo "Unexpected default local antigravity.dest"

@@ -104,6 +104,7 @@ let
     antigravity = { dest = ".agents/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
     gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
     pi = { dest = ".pi/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
+    oh-my-pi = { dest = ".omp/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
   };
 
   # Default exclude patterns for rsync synchronization.

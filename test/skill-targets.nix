@@ -15,6 +15,7 @@ let
     nullable = skill { agents = null; };
     hidden = skill { agents = [ ]; };
     claude-only = skill { agents = [ "claude" ]; };
+    oh-my-pi-only = skill { agents = [ "oh-my-pi" ]; };
     custom-only = skill { agents = [ "custom" ]; };
     both = skill { agents = [ "claude" "codex" "claude" ]; };
     transformed = skill {
@@ -79,10 +80,11 @@ assert expect (!(selection ? disabled)) "disabled explicit skills must be exclud
 assert expect bundle.hasTargetRestrictions "restricted bundle metadata is missing";
 assert expect (!unrestrictedBundle.hasTargetRestrictions) "null/omitted lists must not restrict targets";
 assert expect hiddenBundle.hasTargetRestrictions "an empty allowlist is still a restriction";
-assert expect (lib.sort builtins.lessThan bundle.skillTargetNames == [ "claude" "codex" "custom" ]) "target names must be unique";
+assert expect (lib.sort builtins.lessThan bundle.skillTargetNames == [ "claude" "codex" "custom" "oh-my-pi" ]) "target names must be unique";
 assert expect (lib.all rejectsAgents [ "claude" 1 true { claude = true; } [ null ] [ 1 ] [ "" ] ]) "invalid agents values were accepted";
 assert expect (!evaluationSucceeds (programFor [ "cluade" ] { })) "unknown target names must fail evaluation";
 assert expect (evaluationSucceeds (programFor [ "claude" ] { })) "disabled built-in targets must remain valid";
+assert expect (evaluationSucceeds (programFor [ "oh-my-pi" ] { })) "oh-my-pi must be a built-in target";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })) "custom target keys must be accepted";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
@@ -94,6 +96,7 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   ${assertContents (bundle.forTarget "claude") [ "fixture" "shared" "nullable" "claude-only" "both" ]}
   ${assertContents (bundle.forTarget "codex") [ "fixture" "shared" "nullable" "both" "transformed" ]}
   ${assertContents (bundle.forTarget "custom") [ "fixture" "shared" "nullable" "custom-only" ]}
+  ${assertContents (bundle.forTarget "oh-my-pi") [ "fixture" "shared" "nullable" "oh-my-pi-only" ]}
   ${assertContents (bundle.forTarget "gemini") [ "fixture" "shared" "nullable" ]}
 
   # Filtering must retain materialized transformations and the source content.
