@@ -120,8 +120,8 @@ assert expect (evaluationSucceeds (programFor [ "oh-my-pi" ] { })) "oh-my-pi mus
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })) "custom target keys must be accepted";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
-assert expect (!evaluationSucceeds (collisionBundle.forTarget "oh-my-pi")) "flattened oh-my-pi paths must reject collisions";
-assert expect (evaluationSucceeds (collisionBundle.forTarget "codex")) "other targets must retain separate prefixed paths";
+assert expect (!evaluationSucceeds ((collisionBundle.forTarget "oh-my-pi").drvPath)) "flattened oh-my-pi paths must reject collisions";
+assert expect (evaluationSucceeds ((collisionBundle.forTarget "codex").drvPath)) "other targets must retain separate prefixed paths";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
