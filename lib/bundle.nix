@@ -122,15 +122,12 @@ let
             (seen: destination:
               let
                 collision = lib.findFirst
-                  (previous:
-                    previous.path == destination.path
-                    || lib.hasPrefix "${previous.path}/" destination.path
-                    || lib.hasPrefix "${destination.path}/" previous.path)
+                  (previous: previous.path == destination.path)
                   null
                   seen;
               in
               if collision != null then
-                throw "agent-skills: oh-my-pi skill path collision: ${collision.id} and ${destination.id}"
+                throw "agent-skills: oh-my-pi skill path collision at '${destination.path}': ${collision.id} and ${destination.id}"
               else seen ++ [ destination ])
             [ ]
             destinations;

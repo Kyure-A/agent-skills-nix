@@ -88,6 +88,22 @@ let
     };
     name = "agent-skills-prefixed-collision-bundle";
   };
+  nestedCollisionBundle = agents: agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = nestedCatalog;
+      sources = nestedSources;
+      allowlist = [ "cat-a/skill-1" ];
+      skills."different/skill-1" = {
+        from = "nested";
+        path = "cat-a/skill-2";
+        inherit agents;
+      };
+    };
+    name = "agent-skills-nested-collision-bundle";
+  };
+  unrestrictedCollision = nestedCollisionBundle null;
+  filteredCollision = nestedCollisionBundle [ "codex" ];
   evaluationSucceeds = value: (builtins.tryEval (builtins.deepSeq value true)).success;
   rejectsAgents = agents: !evaluationSucceeds (select { invalid = skill { inherit agents; }; });
   programFor = agents: targets:
@@ -137,6 +153,9 @@ assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // 
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
 assert expect (!evaluationSucceeds ((collisionBundle.forTarget "oh-my-pi").drvPath)) "flattened oh-my-pi paths must reject collisions";
 assert expect (evaluationSucceeds ((collisionBundle.forTarget "codex").drvPath)) "other targets must retain separate prefixed paths";
+assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget "oh-my-pi").drvPath)) "nested and explicit IDs with the same basename must collide";
+assert expect (evaluationSucceeds ((unrestrictedCollision.forTarget "codex").drvPath)) "other targets must preserve the distinct nested paths";
+assert expect (evaluationSucceeds ((filteredCollision.forTarget "oh-my-pi").drvPath)) "skills routed away from oh-my-pi must not collide";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
