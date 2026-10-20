@@ -41,6 +41,38 @@ let
     };
     name = "agent-skills-hidden-bundle";
   };
+  prefixedSources.alpha = {
+    path = ./fixtures/multi-skill-shared-root;
+    idPrefix = "alpha";
+  };
+  prefixedCatalog = agentLib.discoverCatalog prefixedSources;
+  prefixedBundle = agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = prefixedCatalog;
+      sources = prefixedSources;
+      allowlist = builtins.attrNames prefixedCatalog;
+      skills."explicit/renamed" = {
+        from = "alpha";
+        path = "skill-a";
+      };
+    };
+    name = "agent-skills-prefixed-bundle";
+  };
+  collisionSources = {
+    alpha = prefixedSources.alpha;
+    beta = prefixedSources.alpha // { idPrefix = "beta"; };
+  };
+  collisionCatalog = agentLib.discoverCatalog collisionSources;
+  collisionBundle = agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = collisionCatalog;
+      sources = collisionSources;
+      allowlist = builtins.attrNames collisionCatalog;
+    };
+    name = "agent-skills-prefixed-collision-bundle";
+  };
   evaluationSucceeds = value: (builtins.tryEval (builtins.deepSeq value true)).success;
   rejectsAgents = agents: !evaluationSucceeds (select { invalid = skill { inherit agents; }; });
   programFor = agents: targets:
@@ -88,6 +120,8 @@ assert expect (evaluationSucceeds (programFor [ "oh-my-pi" ] { })) "oh-my-pi mus
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })) "custom target keys must be accepted";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
+assert expect (!evaluationSucceeds (collisionBundle.forTarget "oh-my-pi")) "flattened oh-my-pi paths must reject collisions";
+assert expect (evaluationSucceeds (collisionBundle.forTarget "codex")) "other targets must retain separate prefixed paths";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -106,6 +140,13 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   test ! -e ${bundle}/disabled
   test -f ${hiddenBundle}/hidden/SKILL.md
   test -z "$(find ${hiddenBundle.forTarget "claude"} -mindepth 1 -maxdepth 1 -print -quit)"
+
+  test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-a/SKILL.md
+  test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-b/SKILL.md
+  test ! -e ${prefixedBundle.forTarget "oh-my-pi"}/alpha
+  test -f ${prefixedBundle.forTarget "oh-my-pi"}/explicit/renamed/SKILL.md
+  test -f ${prefixedBundle.forTarget "codex"}/alpha/skill-a/SKILL.md
+  test ! -e ${prefixedBundle.forTarget "codex"}/skill-a
 
   mkdir -p "$out"
   touch "$out/ok"

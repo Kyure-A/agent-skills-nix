@@ -80,6 +80,29 @@ let
     bundle = plainBundle;
     targets.plain = { dest = "plain"; structure = "copy-tree"; };
   };
+  prefixedSources.fixture = {
+    path = ./fixtures/multi-skill-shared-root;
+    idPrefix = "fixture";
+  };
+  prefixedCatalog = agentLib.discoverCatalog prefixedSources;
+  prefixedBundle = agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = prefixedCatalog;
+      sources = prefixedSources;
+      allowlist = builtins.attrNames prefixedCatalog;
+    };
+  };
+  ompGlobalProgram = agentLib.mkSyncProgram {
+    inherit pkgs;
+    bundle = prefixedBundle;
+    targets.oh-my-pi = agentLib.defaultTargets.oh-my-pi // { enable = true; };
+  };
+  ompLocalProgram = agentLib.mkLocalInstallProgram {
+    inherit pkgs;
+    bundle = prefixedBundle;
+    targets.oh-my-pi = agentLib.defaultLocalTargets.oh-my-pi // { enable = true; };
+  };
 in
 assert !unknownTarget.success;
 pkgs.runCommand "agent-skills-target-runtime-test"
@@ -87,6 +110,17 @@ pkgs.runCommand "agent-skills-target-runtime-test"
   ''
     set -euo pipefail
     fail() { echo "ERROR: $*" >&2; exit 1; }
+
+    omp_home="$PWD/omp-home"
+    omp_project="$PWD/omp-project"
+    mkdir -p "$omp_home" "$omp_project"
+    HOME="$omp_home" ${ompGlobalProgram}/bin/skills-install
+    AGENT_SKILLS_ROOT="$omp_project" ${ompLocalProgram}/bin/skills-install-local
+    for dest in "$omp_home/.omp/agent/skills" "$omp_project/.omp/skills"; do
+      test -f "$dest/skill-a/SKILL.md" || fail "oh-my-pi: missing flat skill-a in $dest"
+      test -f "$dest/skill-b/SKILL.md" || fail "oh-my-pi: missing flat skill-b in $dest"
+      test ! -e "$dest/fixture" || fail "oh-my-pi: idPrefix leaked into $dest"
+    done
 
     ${lib.concatMapStringsSep "\n" (mode: let
       initialProgram = mkProgram mode initialBundle;

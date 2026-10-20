@@ -48,6 +48,18 @@ let
   paths = cfg.targetBundlePaths;
   linkedSource = config.home.file.".claude/skills".source;
   activation = config.home.activation.agent-skills.data;
+  prefixedConfig = (mkConfig {
+    programs.agent-skills = {
+      sources.prefixed = {
+        path = ./fixtures/multi-skill-shared-root;
+        idPrefix = "prefixed";
+      };
+      skills.enableAll = [ "prefixed" ];
+      targets.oh-my-pi.enable = true;
+    };
+  }).config;
+  prefixedPath = prefixedConfig.programs.agent-skills.targetBundlePaths.oh-my-pi;
+  prefixedActivation = prefixedConfig.home.activation.agent-skills.data;
   noTargets = (mkConfig {
     programs.agent-skills.skills.explicit.shared = skill { };
   }).config.programs.agent-skills;
@@ -108,6 +120,16 @@ pkgs.runCommand "agent-skills-home-manager-skill-targets-test" { } ''
   test -L "$HOME/.custom/skills/custom-only"
   test ! -e "$HOME/.inactive/skills"
   test ! -e "$HOME/.elsewhere/skills"
+
+  test -f ${prefixedPath}/skill-a/SKILL.md
+  test -f ${prefixedPath}/skill-b/SKILL.md
+  test ! -e ${prefixedPath}/prefixed
+  mkdir -p "$PWD/omp-home"
+  export HOME="$PWD/omp-home"
+  ${prefixedActivation}
+  test -f "$HOME/.omp/agent/skills/skill-a/SKILL.md"
+  test -f "$HOME/.omp/agent/skills/skill-b/SKILL.md"
+  test ! -e "$HOME/.omp/agent/skills/prefixed"
 
   mkdir -p "$out"
   touch "$out/ok"

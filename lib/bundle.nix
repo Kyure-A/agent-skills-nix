@@ -114,13 +114,36 @@ let
       forTarget = target:
         let
           allowed = builtins.filter (skill: skill.agents == null || builtins.elem target skill.agents) skills;
+          targetPath = skill:
+            if target == "oh-my-pi" && (skill.idPrefix or null) != null then
+              lib.removePrefix "${skill.idPrefix}/" skill.id
+            else skill.id;
+          destinations = map (skill: { inherit (skill) id; path = targetPath skill; }) allowed;
+          checkedDestinations = foldl'
+            (seen: destination:
+              let
+                collision = lib.findFirst
+                  (previous:
+                    previous.path == destination.path
+                    || lib.hasPrefix "${previous.path}/" destination.path
+                    || lib.hasPrefix "${destination.path}/" previous.path)
+                  null
+                  seen;
+              in
+              if collision != null then
+                throw "agent-skills: oh-my-pi skill path collision: ${collision.id} and ${destination.id}"
+              else seen ++ [ destination ])
+            [ ]
+            destinations;
+          flatten = target == "oh-my-pi" && lib.any (skill: (skill.idPrefix or null) != null) allowed;
         in
-        if builtins.length allowed == builtins.length skills then result
+        if !flatten && builtins.length allowed == builtins.length skills then result
         else
+          assert target != "oh-my-pi" || builtins.deepSeq checkedDestinations true;
           pkgs.runCommand "${name}-filtered" { preferLocalBuild = true; } ''
             mkdir -p "$out"
             ${concatMapStringsSep "\n" (skill: ''
-              dest=${lib.escapeShellArg skill.id}
+              dest=${lib.escapeShellArg (targetPath skill)}
               mkdir -p "$out/$(dirname "$dest")"
               ln -s ${lib.escapeShellArg "${result}/${skill.id}"} "$out/$dest"
             '') allowed}
