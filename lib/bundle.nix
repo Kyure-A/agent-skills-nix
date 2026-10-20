@@ -114,10 +114,9 @@ let
       forTarget = target:
         let
           allowed = builtins.filter (skill: skill.agents == null || builtins.elem target skill.agents) skills;
+          # omp discovers only immediate children of its skills directory.
           targetPath = skill:
-            if target == "oh-my-pi" && (skill.idPrefix or null) != null then
-              lib.removePrefix "${skill.idPrefix}/" skill.id
-            else skill.id;
+            if target == "oh-my-pi" then builtins.baseNameOf skill.id else skill.id;
           destinations = map (skill: { inherit (skill) id; path = targetPath skill; }) allowed;
           checkedDestinations = foldl'
             (seen: destination:
@@ -135,7 +134,7 @@ let
               else seen ++ [ destination ])
             [ ]
             destinations;
-          flatten = target == "oh-my-pi" && lib.any (skill: (skill.idPrefix or null) != null) allowed;
+          flatten = target == "oh-my-pi" && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
         in
         if !flatten && builtins.length allowed == builtins.length skills then result
         else

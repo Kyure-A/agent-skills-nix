@@ -81,7 +81,7 @@ let
     targets.plain = { dest = "plain"; structure = "copy-tree"; };
   };
   prefixedSources.fixture = {
-    path = ./fixtures/multi-skill-shared-root;
+    path = ./fixtures/nested-skills;
     idPrefix = "fixture";
   };
   prefixedCatalog = agentLib.discoverCatalog prefixedSources;
@@ -117,9 +117,10 @@ pkgs.runCommand "agent-skills-target-runtime-test"
     HOME="$omp_home" ${ompGlobalProgram}/bin/skills-install
     AGENT_SKILLS_ROOT="$omp_project" ${ompLocalProgram}/bin/skills-install-local
     for dest in "$omp_home/.omp/agent/skills" "$omp_project/.omp/skills"; do
-      test -f "$dest/skill-a/SKILL.md" || fail "oh-my-pi: missing flat skill-a in $dest"
-      test -f "$dest/skill-b/SKILL.md" || fail "oh-my-pi: missing flat skill-b in $dest"
+      test -f "$dest/skill-1/SKILL.md" || fail "oh-my-pi: missing top-level skill-1 in $dest"
+      test -f "$dest/skill-2/SKILL.md" || fail "oh-my-pi: missing top-level skill-2 in $dest"
       test ! -e "$dest/fixture" || fail "oh-my-pi: idPrefix leaked into $dest"
+      test ! -e "$dest/cat-a" || fail "oh-my-pi: nested skills are not discoverable in $dest"
     done
 
     ${lib.concatMapStringsSep "\n" (mode: let

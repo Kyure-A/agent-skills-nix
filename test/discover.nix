@@ -246,8 +246,6 @@ pkgs.runCommand "agent-skills-discover-test" {} ''
     echo "ERROR: ID beta/cat-a/skill-1 not found"
     exit 1
   ''}
-  test '${prefixedCatalog."alpha/cat-a/skill-1".idPrefix}' = alpha
-  test '${prefixedCatalog."beta/cat-a/skill-1".idPrefix}' = beta
   echo "Test 4 passed!"
 
   echo ""

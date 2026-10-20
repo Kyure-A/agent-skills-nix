@@ -79,7 +79,6 @@ let
             if include then [
               {
                 id = prefixSkillId idPrefix (if relPath == "" then name else relPath);
-                inherit idPrefix;
                 source = name;
                 relPath = relPath;
                 sourceRoot = skillsRoot;

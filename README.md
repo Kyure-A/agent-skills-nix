@@ -144,11 +144,12 @@ with unchanged upstream revisions produces the same lock bytes. See the complete
 | pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
 | oh-my-pi | `$HOME/.omp/agent/skills` | `.omp/skills` |
 
-For `oh-my-pi`, a discovered skill's `idPrefix` is omitted from its installed
-path (for example, `team/writing` installs as `writing`). Other targets keep
-the prefixed path, and explicitly named skills retain their IDs. If removing
-prefixes would give two skills the same or overlapping paths, evaluation fails
-instead of silently overwriting one.
+For `oh-my-pi`, every selected skill is installed as an immediate child of
+the skills directory, since omp does not discover nested skill paths. The last
+component of the ID becomes the directory name: `team/tools/writing` installs
+as `writing`, including for explicitly named skills. Other targets keep the
+full ID path. If two selected skills have the same final component, evaluation
+fails instead of silently overwriting one.
 
 ## Quick start (child flake + Home Manager)
 

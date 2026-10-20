@@ -59,6 +59,21 @@ let
     };
     name = "agent-skills-prefixed-bundle";
   };
+  nestedSources.nested.path = ./fixtures/nested-skills;
+  nestedCatalog = agentLib.discoverCatalog nestedSources;
+  nestedBundle = agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = nestedCatalog;
+      sources = nestedSources;
+      allowlist = builtins.attrNames nestedCatalog;
+      skills."custom/manual" = {
+        from = "nested";
+        path = "cat-a/skill-1";
+      };
+    };
+    name = "agent-skills-nested-omp-bundle";
+  };
   collisionSources = {
     alpha = prefixedSources.alpha;
     beta = prefixedSources.alpha // { idPrefix = "beta"; };
@@ -144,9 +159,19 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-a/SKILL.md
   test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-b/SKILL.md
   test ! -e ${prefixedBundle.forTarget "oh-my-pi"}/alpha
-  test -f ${prefixedBundle.forTarget "oh-my-pi"}/explicit/renamed/SKILL.md
+  test -f ${prefixedBundle.forTarget "oh-my-pi"}/renamed/SKILL.md
+  test ! -e ${prefixedBundle.forTarget "oh-my-pi"}/explicit
+  test -f ${prefixedBundle.forTarget "codex"}/explicit/renamed/SKILL.md
   test -f ${prefixedBundle.forTarget "codex"}/alpha/skill-a/SKILL.md
   test ! -e ${prefixedBundle.forTarget "codex"}/skill-a
+
+  test -f ${nestedBundle.forTarget "oh-my-pi"}/skill-1/SKILL.md
+  test -f ${nestedBundle.forTarget "oh-my-pi"}/skill-2/SKILL.md
+  test -f ${nestedBundle.forTarget "oh-my-pi"}/manual/SKILL.md
+  test ! -e ${nestedBundle.forTarget "oh-my-pi"}/cat-a
+  test ! -e ${nestedBundle.forTarget "oh-my-pi"}/custom
+  test -f ${nestedBundle.forTarget "codex"}/cat-a/skill-1/SKILL.md
+  test -f ${nestedBundle.forTarget "codex"}/custom/manual/SKILL.md
 
   mkdir -p "$out"
   touch "$out/ok"
