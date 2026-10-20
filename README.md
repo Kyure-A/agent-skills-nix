@@ -142,6 +142,7 @@ with unchanged upstream revisions produces the same lock bytes. See the complete
 | antigravity | `$HOME/.gemini/antigravity/skills` | `.agents/skills` |
 | gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
 | pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
+| oh-my-pi | `$HOME/.omp/agent/skills` | `.omp/skills` |
 
 ## Quick start (child flake + Home Manager)
 
