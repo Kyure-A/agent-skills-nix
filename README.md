@@ -144,6 +144,12 @@ with unchanged upstream revisions produces the same lock bytes. See the complete
 | pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
 | oh-my-pi | `$HOME/.omp/agent/skills` | `.omp/skills` |
 
+For `oh-my-pi`, a discovered skill's `idPrefix` is omitted from its installed
+path (for example, `team/writing` installs as `writing`). Other targets keep
+the prefixed path, and explicitly named skills retain their IDs. If removing
+prefixes would give two skills the same or overlapping paths, evaluation fails
+instead of silently overwriting one.
+
 ## Quick start (child flake + Home Manager)
 
 Put skills config in a small child flake so the only pinned inputs there are skill sources.
