@@ -82,6 +82,12 @@ let
       enable = false;
       systems = [ ];
     };
+    oh-my-pi = {
+      dest = "$HOME/.omp/agent/skills";
+      structure = "symlink-tree";
+      enable = false;
+      systems = [ ];
+    };
   };
 
   # Default local targets for project-local skill installation.

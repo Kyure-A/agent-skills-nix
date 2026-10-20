@@ -12,7 +12,12 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
     test "${agentLib.defaultTargets.${name}.dest}" != "" || { echo "Missing dest for ${name}"; exit 1; }
     test "${agentLib.defaultTargets.${name}.structure}" = "symlink-tree" || { echo "Wrong structure for ${name}"; exit 1; }
     test "${if agentLib.defaultTargets.${name}.enable then "true" else "false"}" = "false" || { echo "Expected ${name}.enable=false by default"; exit 1; }
-  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi"]}
+  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi" "oh-my-pi"]}
+
+  test '${agentLib.defaultTargets.oh-my-pi.dest}' = '$HOME/.omp/agent/skills' || {
+    echo "Unexpected default global oh-my-pi.dest"
+    exit 1
+  }
 
   echo ""
   echo "=== Testing default local targets ==="
