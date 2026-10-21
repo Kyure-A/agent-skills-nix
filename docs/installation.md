@@ -64,10 +64,35 @@ nix run .#skills-install
 unrestricted bundle. See the [library reference](./reference.md) for the
 program helpers and bundle filtering.
 
+## Default target paths
+
+The `agents` target provides a shared installation directory. Product-specific
+targets provide separate destinations when you want to distribute different
+skill sets or use features that require a dedicated path.
+
+The following table lists this library's built-in defaults. All targets are
+disabled by default; global targets use `symlink-tree` and local targets use
+`copy-tree`.
+
+| Target | Global path | Local path |
+|--------|-------------|------------|
+| agents | `$HOME/.agents/skills` | `.agents/skills` |
+| codex | `${CODEX_HOME:-$HOME/.codex}/skills` | `.codex/skills` |
+| opencode | `$HOME/.config/opencode/skills` | `.opencode/skills` |
+| claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` | `.claude/skills` |
+| copilot | `$HOME/.copilot/skills` | `.github/skills` |
+| cursor | `$HOME/.cursor/skills` | `.cursor/skills` |
+| windsurf | `$HOME/.codeium/windsurf/skills` | `.windsurf/skills` |
+| antigravity | `$HOME/.gemini/antigravity/skills` | `.agents/skills` |
+| gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
+| pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
+
+Per-skill `agents` lists select installation targets; they do not control which
+applications can discover the installed files.
+
 ## Target configuration
 
-The [default path table](../README.md#default-target-paths) lists all built-in
-targets. Each supports `enable`, `dest`, `structure`, and `systems`; an empty
+Each target supports `enable`, `dest`, `structure`, and `systems`; an empty
 `systems` list allows every system. Built-in targets must be enabled explicitly.
 Custom targets require a destination.
 
@@ -122,9 +147,8 @@ takeover. Use this only when you intend agent-skills to manage that destination.
 
 Synchronization builds and validates the complete execution plan before
 changing any destination. Targets with the same resolved destination,
-structure, and bundle synchronize once. For example, local `agents` and
-`antigravity` share a destination when their selected skills match; the first
-target's name is used for the ownership marker and progress message.
+structure, and bundle synchronize once. The first target's name is used for the
+ownership marker and progress message.
 
 Different structures or bundles at one destination, or destinations nested
 inside each other, are rejected before synchronization starts.

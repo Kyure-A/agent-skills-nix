@@ -20,7 +20,7 @@ let
 
   # Default global targets for user-level installation.
   # Targets are opt-in by default; enable explicitly per target.
-  # Canonical path docs live in README.md#default-target-paths.
+  # Canonical path docs live in docs/installation.md#default-target-paths.
   defaultTargets = {
     agents = {
       dest = "$HOME/.agents/skills";

@@ -89,23 +89,22 @@ configuration; it does not add apps to your flake.
 
 ## Default target paths
 
+Use `agents` to install a shared skill set for tools that discover
+`.agents/skills`. Claude Code uses its own skill directory:
+
+| Target | Global path | Local path |
+|--------|-------------|------------|
+| agents (shared) | `$HOME/.agents/skills` | `.agents/skills` |
+| claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` | `.claude/skills` |
+
+Product-specific targets remain available for separate installation destinations
+and features that require a dedicated path. See the
+[full target list](./docs/installation.md#default-target-paths).
+
 All built-in targets are disabled by default. Global targets use
 `symlink-tree`; local targets use `copy-tree`. See
 [target configuration](./docs/installation.md#target-configuration) for custom
 paths, structures, and system filters.
-
-| Target | Global path | Local path |
-|--------|-------------|------------|
-| agents | `$HOME/.agents/skills` | `.agents/skills` |
-| codex | `${CODEX_HOME:-$HOME/.codex}/skills` | `.codex/skills` |
-| opencode | `$HOME/.config/opencode/skills` | `.opencode/skills` |
-| claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` | `.claude/skills` |
-| copilot | `$HOME/.copilot/skills` | `.github/skills` |
-| cursor | `$HOME/.cursor/skills` | `.cursor/skills` |
-| windsurf | `$HOME/.codeium/windsurf/skills` | `.windsurf/skills` |
-| antigravity | `$HOME/.gemini/antigravity/skills` | `.agents/skills` |
-| gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
-| pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
 
 ## Development
 
