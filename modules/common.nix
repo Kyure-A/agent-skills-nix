@@ -45,6 +45,12 @@ let
         description = "How the target is laid out (link, symlink-tree, or copy-tree).";
       };
 
+      flatten = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Install skills as immediate children using the last component of their final IDs.";
+      };
+
       systems = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];

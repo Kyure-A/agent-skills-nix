@@ -1,7 +1,7 @@
 # Test targets default merging behaviour
 { pkgs, agentLib }:
 
-pkgs.runCommand "agent-skills-targets-test" {} ''
+pkgs.runCommand "agent-skills-targets-test" { } ''
   set -e
 
   echo "=== Testing targetsFor with default targets ==="
@@ -12,12 +12,7 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
     test "${agentLib.defaultTargets.${name}.dest}" != "" || { echo "Missing dest for ${name}"; exit 1; }
     test "${agentLib.defaultTargets.${name}.structure}" = "symlink-tree" || { echo "Wrong structure for ${name}"; exit 1; }
     test "${if agentLib.defaultTargets.${name}.enable then "true" else "false"}" = "false" || { echo "Expected ${name}.enable=false by default"; exit 1; }
-  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi" "oh-my-pi"]}
-
-  test '${agentLib.defaultTargets.oh-my-pi.dest}' = '$HOME/.omp/agent/skills' || {
-    echo "Unexpected default global oh-my-pi.dest"
-    exit 1
-  }
+  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi"]}
 
   echo ""
   echo "=== Testing default local targets ==="
@@ -27,12 +22,7 @@ pkgs.runCommand "agent-skills-targets-test" {} ''
     test "${agentLib.defaultLocalTargets.${name}.dest}" != "" || { echo "Missing local dest for ${name}"; exit 1; }
     test "${agentLib.defaultLocalTargets.${name}.structure}" = "copy-tree" || { echo "Wrong local structure for ${name}"; exit 1; }
     test "${if agentLib.defaultLocalTargets.${name}.enable then "true" else "false"}" = "false" || { echo "Expected local ${name}.enable=false by default"; exit 1; }
-  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi" "oh-my-pi"]}
-
-  test '${agentLib.defaultLocalTargets.oh-my-pi.dest}' = '.omp/skills' || {
-    echo "Unexpected default local oh-my-pi.dest"
-    exit 1
-  }
+  '') ["agents" "codex" "opencode" "claude" "copilot" "antigravity" "gemini" "cursor" "windsurf" "pi"]}
 
   test "${agentLib.defaultLocalTargets.antigravity.dest}" = ".agents/skills" || {
     echo "Unexpected default local antigravity.dest"

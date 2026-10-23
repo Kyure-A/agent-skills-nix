@@ -112,12 +112,11 @@ let
       skillTargetNames = unique (concatMap (skill: if skill.agents == null then [ ] else skill.agents) skills);
       # Share materialized skills (including transforms and dependencies) across
       # targets instead of dumping and sanitizing the same sources for each one.
-      forTarget = { name }:
+      forTarget = { name, flatten ? false }:
         let
           allowed = builtins.filter (skill: skill.agents == null || builtins.elem name skill.agents) skills;
-          # omp discovers only immediate children of its skills directory.
           targetPath = skill:
-            if name == "oh-my-pi" then builtins.baseNameOf skill.id else skill.id;
+            if flatten then builtins.baseNameOf skill.id else skill.id;
           destinations = map (skill: { inherit (skill) id; path = targetPath skill; }) allowed;
           checkedDestinations = foldl'
             (seen: destination:
@@ -128,15 +127,15 @@ let
                   seen;
               in
               if collision != null then
-                throw "agent-skills: oh-my-pi skill path collision at '${destination.path}': ${collision.id} and ${destination.id}"
+                throw "agent-skills: flattened skill path collision at '${destination.path}': ${collision.id} and ${destination.id}"
               else seen ++ [ destination ])
             [ ]
             destinations;
-          flatten = name == "oh-my-pi" && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
+          needsFlattening = flatten && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
         in
-        if !flatten && builtins.length allowed == builtins.length skills then result
+        assert !flatten || builtins.deepSeq checkedDestinations true;
+        if !needsFlattening && builtins.length allowed == builtins.length skills then result
         else
-          assert name != "oh-my-pi" || builtins.deepSeq checkedDestinations true;
           pkgs.runCommand "${bundleName}-filtered" { preferLocalBuild = true; } ''
             mkdir -p "$out"
             ${concatMapStringsSep "\n" (skill: ''

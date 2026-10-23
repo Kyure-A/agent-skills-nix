@@ -15,7 +15,6 @@ let
     nullable = skill { agents = null; };
     hidden = skill { agents = [ ]; };
     claude-only = skill { agents = [ "claude" ]; };
-    oh-my-pi-only = skill { agents = [ "oh-my-pi" ]; };
     custom-only = skill { agents = [ "custom" ]; };
     both = skill { agents = [ "claude" "codex" "claude" ]; };
     transformed = skill {
@@ -72,7 +71,7 @@ let
         path = "cat-a/skill-1";
       };
     };
-    name = "agent-skills-nested-omp-bundle";
+    name = "agent-skills-nested-bundle";
   };
   collisionSources = {
     alpha = prefixedSources.alpha;
@@ -143,19 +142,18 @@ assert expect (!(selection ? disabled)) "disabled explicit skills must be exclud
 assert expect bundle.hasTargetRestrictions "restricted bundle metadata is missing";
 assert expect (!unrestrictedBundle.hasTargetRestrictions) "null/omitted lists must not restrict targets";
 assert expect hiddenBundle.hasTargetRestrictions "an empty allowlist is still a restriction";
-assert expect (lib.sort builtins.lessThan bundle.skillTargetNames == [ "claude" "codex" "custom" "oh-my-pi" ]) "target names must be unique";
+assert expect (lib.sort builtins.lessThan bundle.skillTargetNames == [ "claude" "codex" "custom" ]) "target names must be unique";
 assert expect (lib.all rejectsAgents [ "claude" 1 true { claude = true; } [ null ] [ 1 ] [ "" ] ]) "invalid agents values were accepted";
 assert expect (!evaluationSucceeds (programFor [ "cluade" ] { })) "unknown target names must fail evaluation";
 assert expect (evaluationSucceeds (programFor [ "claude" ] { })) "disabled built-in targets must remain valid";
-assert expect (evaluationSucceeds (programFor [ "oh-my-pi" ] { })) "oh-my-pi must be a built-in target";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })) "custom target keys must be accepted";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
-assert expect (!evaluationSucceeds ((collisionBundle.forTarget { name = "oh-my-pi"; }).drvPath)) "flattened oh-my-pi paths must reject collisions";
+assert expect (!evaluationSucceeds ((collisionBundle.forTarget { name = "agents"; flatten = true; }).drvPath)) "flattened paths must reject collisions";
 assert expect (evaluationSucceeds ((collisionBundle.forTarget { name = "codex"; }).drvPath)) "other targets must retain separate prefixed paths";
-assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget { name = "oh-my-pi"; }).drvPath)) "nested and explicit IDs with the same basename must collide";
+assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget { name = "agents"; flatten = true; }).drvPath)) "nested and explicit IDs with the same basename must collide";
 assert expect (evaluationSucceeds ((unrestrictedCollision.forTarget { name = "codex"; }).drvPath)) "other targets must preserve the distinct nested paths";
-assert expect (evaluationSucceeds ((filteredCollision.forTarget { name = "oh-my-pi"; }).drvPath)) "skills routed away from oh-my-pi must not collide";
+assert expect (evaluationSucceeds ((filteredCollision.forTarget { name = "agents"; flatten = true; }).drvPath)) "skills routed away from the target must not collide";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -164,7 +162,6 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   ${assertContents (bundle.forTarget { name = "claude"; }) [ "fixture" "shared" "nullable" "claude-only" "both" ]}
   ${assertContents (bundle.forTarget { name = "codex"; }) [ "fixture" "shared" "nullable" "both" "transformed" ]}
   ${assertContents (bundle.forTarget { name = "custom"; }) [ "fixture" "shared" "nullable" "custom-only" ]}
-  ${assertContents (bundle.forTarget { name = "oh-my-pi"; }) [ "fixture" "shared" "nullable" "oh-my-pi-only" ]}
   ${assertContents (bundle.forTarget { name = "gemini"; }) [ "fixture" "shared" "nullable" ]}
 
   # Filtering must retain materialized transformations and the source content.
@@ -175,20 +172,20 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   test -f ${hiddenBundle}/hidden/SKILL.md
   test -z "$(find ${hiddenBundle.forTarget { name = "claude"; }} -mindepth 1 -maxdepth 1 -print -quit)"
 
-  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/skill-a/SKILL.md
-  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/skill-b/SKILL.md
-  test ! -e ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/alpha
-  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/renamed/SKILL.md
-  test ! -e ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/explicit
+  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-a/SKILL.md
+  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-b/SKILL.md
+  test ! -e ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/alpha
+  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/renamed/SKILL.md
+  test ! -e ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/explicit
   test -f ${prefixedBundle.forTarget { name = "codex"; }}/explicit/renamed/SKILL.md
   test -f ${prefixedBundle.forTarget { name = "codex"; }}/alpha/skill-a/SKILL.md
   test ! -e ${prefixedBundle.forTarget { name = "codex"; }}/skill-a
 
-  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/skill-1/SKILL.md
-  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/skill-2/SKILL.md
-  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/manual/SKILL.md
-  test ! -e ${nestedBundle.forTarget { name = "oh-my-pi"; }}/cat-a
-  test ! -e ${nestedBundle.forTarget { name = "oh-my-pi"; }}/custom
+  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-1/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-2/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/manual/SKILL.md
+  test ! -e ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/cat-a
+  test ! -e ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/custom
   test -f ${nestedBundle.forTarget { name = "codex"; }}/cat-a/skill-1/SKILL.md
   test -f ${nestedBundle.forTarget { name = "codex"; }}/custom/manual/SKILL.md
 

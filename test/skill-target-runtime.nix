@@ -93,15 +93,15 @@ let
       allowlist = builtins.attrNames prefixedCatalog;
     };
   };
-  ompGlobalProgram = agentLib.mkSyncProgram {
+  flattenGlobalProgram = agentLib.mkSyncProgram {
     inherit pkgs;
     bundle = prefixedBundle;
-    targets.oh-my-pi = agentLib.defaultTargets.oh-my-pi // { enable = true; };
+    targets.agents = agentLib.defaultTargets.agents // { enable = true; flatten = true; };
   };
-  ompLocalProgram = agentLib.mkLocalInstallProgram {
+  flattenLocalProgram = agentLib.mkLocalInstallProgram {
     inherit pkgs;
     bundle = prefixedBundle;
-    targets.oh-my-pi = agentLib.defaultLocalTargets.oh-my-pi // { enable = true; };
+    targets.agents = agentLib.defaultLocalTargets.agents // { enable = true; flatten = true; };
   };
 in
 assert !unknownTarget.success;
@@ -111,16 +111,16 @@ pkgs.runCommand "agent-skills-target-runtime-test"
     set -euo pipefail
     fail() { echo "ERROR: $*" >&2; exit 1; }
 
-    omp_home="$PWD/omp-home"
-    omp_project="$PWD/omp-project"
-    mkdir -p "$omp_home" "$omp_project"
-    HOME="$omp_home" ${ompGlobalProgram}/bin/skills-install
-    AGENT_SKILLS_ROOT="$omp_project" ${ompLocalProgram}/bin/skills-install-local
-    for dest in "$omp_home/.omp/agent/skills" "$omp_project/.omp/skills"; do
-      test -f "$dest/skill-1/SKILL.md" || fail "oh-my-pi: missing top-level skill-1 in $dest"
-      test -f "$dest/skill-2/SKILL.md" || fail "oh-my-pi: missing top-level skill-2 in $dest"
-      test ! -e "$dest/fixture" || fail "oh-my-pi: idPrefix leaked into $dest"
-      test ! -e "$dest/cat-a" || fail "oh-my-pi: nested skills are not discoverable in $dest"
+    flatten_home="$PWD/flatten-home"
+    flatten_project="$PWD/flatten-project"
+    mkdir -p "$flatten_home" "$flatten_project"
+    HOME="$flatten_home" ${flattenGlobalProgram}/bin/skills-install
+    AGENT_SKILLS_ROOT="$flatten_project" ${flattenLocalProgram}/bin/skills-install-local
+    for dest in "$flatten_home/.agents/skills" "$flatten_project/.agents/skills"; do
+      cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} "$dest/skill-1/SKILL.md"
+      cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} "$dest/skill-2/SKILL.md"
+      test ! -e "$dest/fixture" || fail "flatten: idPrefix leaked into $dest"
+      test ! -e "$dest/cat-a" || fail "flatten: nested path leaked into $dest"
     done
 
     ${lib.concatMapStringsSep "\n" (mode: let

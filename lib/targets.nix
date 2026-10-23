@@ -82,12 +82,6 @@ let
       enable = false;
       systems = [ ];
     };
-    oh-my-pi = {
-      dest = "$HOME/.omp/agent/skills";
-      structure = "symlink-tree";
-      enable = false;
-      systems = [ ];
-    };
   };
 
   # Default local targets for project-local skill installation.
@@ -104,7 +98,6 @@ let
     antigravity = { dest = ".agents/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
     gemini = { dest = ".gemini/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
     pi = { dest = ".pi/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
-    oh-my-pi = { dest = ".omp/skills"; structure = "copy-tree"; enable = false; systems = [ ]; };
   };
 
   # Default exclude patterns for rsync synchronization.
@@ -125,7 +118,12 @@ let
     assert lib.assertMsg (unknownTargetNames == [ ])
       "agent-skills: unknown skill agents target(s): ${lib.concatStringsSep ", " unknownTargetNames}; use a built-in target name or define a matching targets attribute";
     lib.mapAttrs
-      (name: _: if hasBundleMetadata && bundle ? forTarget then bundle.forTarget { inherit name; } else bundle)
+      (name: target:
+        if hasBundleMetadata && bundle ? forTarget then
+          bundle.forTarget { inherit name; flatten = target.flatten or false; }
+        else if target.flatten or false then
+          throw "agent-skills: flatten requires a bundle created by mkBundle for target '${name}'"
+        else bundle)
       (targetsFor { inherit targets system; });
 
   # Build an executable that delegates synchronization to the shared runtime.

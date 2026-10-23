@@ -55,10 +55,10 @@ let
         idPrefix = "prefixed";
       };
       skills.enableAll = [ "prefixed" ];
-      targets.oh-my-pi.enable = true;
+      targets.agents = { enable = true; flatten = true; };
     };
   }).config;
-  prefixedPath = prefixedConfig.programs.agent-skills.targetBundlePaths.oh-my-pi;
+  prefixedPath = prefixedConfig.programs.agent-skills.targetBundlePaths.agents;
   prefixedActivation = prefixedConfig.home.activation.agent-skills.data;
   noTargets = (mkConfig {
     programs.agent-skills.skills.explicit.shared = skill { };
@@ -121,15 +121,15 @@ pkgs.runCommand "agent-skills-home-manager-skill-targets-test" { } ''
   test ! -e "$HOME/.inactive/skills"
   test ! -e "$HOME/.elsewhere/skills"
 
-  test -f ${prefixedPath}/skill-a/SKILL.md
-  test -f ${prefixedPath}/skill-b/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedPath}/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} ${prefixedPath}/skill-b/SKILL.md
   test ! -e ${prefixedPath}/prefixed
-  mkdir -p "$PWD/omp-home"
-  export HOME="$PWD/omp-home"
+  mkdir -p "$PWD/flatten-home"
+  export HOME="$PWD/flatten-home"
   ${prefixedActivation}
-  test -f "$HOME/.omp/agent/skills/skill-a/SKILL.md"
-  test -f "$HOME/.omp/agent/skills/skill-b/SKILL.md"
-  test ! -e "$HOME/.omp/agent/skills/prefixed"
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} "$HOME/.agents/skills/skill-a/SKILL.md"
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} "$HOME/.agents/skills/skill-b/SKILL.md"
+  test ! -e "$HOME/.agents/skills/prefixed"
 
   mkdir -p "$out"
   touch "$out/ok"

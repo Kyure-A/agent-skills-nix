@@ -45,9 +45,19 @@ then passes the result as `allowlist` and `skills.explicit` as `skills` to
 `selectSkills`. See [configuration](./configuration.md) for discovery filters,
 selection validation, renaming, and customisation.
 
-`mkBundle` exposes `bundle.forTarget { name = "claude"; }` to filter the selection by each
-skill's `agents` list. Pass the bundle derivation directly to the install
-helpers to retain this metadata. A plain store path does not carry it.
+`mkBundle` exposes `bundle.forTarget { name = "claude"; }` to filter the selection
+by each skill's `agents` list. Its argument is an attribute set; the former
+target-name string argument is no longer supported.
+
+Use `bundle.forTarget { name = "agents"; flatten = true; }` to install the
+allowed skills under the basenames of their final IDs. `flatten` defaults to
+`false`, independently of the target name. Basename collisions are rejected
+after filtering. The full bundle always retains the original nested IDs, and
+target views share its materialized skill contents.
+
+Pass the bundle derivation directly to the install helpers to retain this
+metadata. A plain store path or derivation without `forTarget` remains usable
+when flattening is disabled, but cannot be used with `flatten = true`.
 
 ## Targets and install programs
 
