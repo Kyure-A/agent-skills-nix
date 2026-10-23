@@ -78,7 +78,16 @@ let
   plainProgram = agentLib.mkLocalInstallProgram {
     inherit pkgs;
     bundle = plainBundle;
-    targets.plain = { dest = "plain"; structure = "copy-tree"; };
+    targets = {
+      plain = { dest = "plain"; structure = "copy-tree"; };
+      disabled = { enable = false; flatten = true; };
+      other-system = { systems = [ "unsupported-system" ]; flatten = true; };
+    };
+  };
+  plainFlattenProgram = agentLib.mkLocalInstallProgram {
+    inherit pkgs;
+    bundle = plainBundle;
+    targets.plain = { dest = "plain"; structure = "copy-tree"; flatten = true; };
   };
   prefixedSources.fixture = {
     path = ./fixtures/nested-skills;
@@ -97,6 +106,12 @@ let
     inherit pkgs;
     bundle = prefixedBundle;
     targets.agents = agentLib.defaultTargets.agents // { enable = true; flatten = true; };
+    targets.portable = {
+      enable = true;
+      dest = "$HOME/portable";
+      structure = "link";
+      flatten = true;
+    };
   };
   flattenLocalProgram = agentLib.mkLocalInstallProgram {
     inherit pkgs;
@@ -105,6 +120,7 @@ let
   };
 in
 assert !unknownTarget.success;
+assert !(builtins.tryEval plainFlattenProgram.drvPath).success;
 pkgs.runCommand "agent-skills-target-runtime-test"
 { nativeBuildInputs = [ pkgs.coreutils pkgs.jq pkgs.rsync ]; }
   ''
@@ -122,6 +138,11 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test ! -e "$dest/fixture" || fail "flatten: idPrefix leaked into $dest"
       test ! -e "$dest/cat-a" || fail "flatten: nested path leaked into $dest"
     done
+    test -L "$flatten_home/.agents/skills/skill-1"
+    test ! -L "$flatten_project/.agents/skills/skill-1"
+    test -L "$flatten_home/portable"
+    cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} "$flatten_home/portable/skill-2/SKILL.md"
+    test ! -e "$flatten_home/portable/fixture"
 
     ${lib.concatMapStringsSep "\n" (mode: let
       initialProgram = mkProgram mode initialBundle;

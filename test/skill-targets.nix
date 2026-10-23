@@ -150,10 +150,7 @@ assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
 assert expect (!evaluationSucceeds ((collisionBundle.forTarget { name = "agents"; flatten = true; }).drvPath)) "flattened paths must reject collisions";
-assert expect (evaluationSucceeds ((collisionBundle.forTarget { name = "codex"; }).drvPath)) "other targets must retain separate prefixed paths";
 assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget { name = "agents"; flatten = true; }).drvPath)) "nested and explicit IDs with the same basename must collide";
-assert expect (evaluationSucceeds ((unrestrictedCollision.forTarget { name = "codex"; }).drvPath)) "other targets must preserve the distinct nested paths";
-assert expect (evaluationSucceeds ((filteredCollision.forTarget { name = "agents"; flatten = true; }).drvPath)) "skills routed away from the target must not collide";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -170,24 +167,42 @@ pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   cmp ${bundle}/transformed/SKILL.md ${bundle.forTarget { name = "codex"; }}/transformed/SKILL.md
   test ! -e ${bundle}/disabled
   test -f ${hiddenBundle}/hidden/SKILL.md
-  test -z "$(find ${hiddenBundle.forTarget { name = "claude"; }} -mindepth 1 -maxdepth 1 -print -quit)"
+  test -z "$(find ${hiddenBundle.forTarget { name = "agents"; flatten = true; }} -mindepth 1 -maxdepth 1 -print -quit)"
 
-  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-a/SKILL.md
-  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-b/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedBundle}/alpha/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/skill-b/SKILL.md
   test ! -e ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/alpha
-  test -f ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/renamed/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/renamed/SKILL.md
   test ! -e ${prefixedBundle.forTarget { name = "agents"; flatten = true; }}/explicit
-  test -f ${prefixedBundle.forTarget { name = "codex"; }}/explicit/renamed/SKILL.md
-  test -f ${prefixedBundle.forTarget { name = "codex"; }}/alpha/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedBundle.forTarget { name = "codex"; }}/explicit/renamed/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} ${prefixedBundle.forTarget { name = "codex"; }}/alpha/skill-b/SKILL.md
   test ! -e ${prefixedBundle.forTarget { name = "codex"; }}/skill-a
 
-  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-1/SKILL.md
-  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-2/SKILL.md
-  test -f ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/manual/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} ${nestedBundle}/cat-a/skill-1/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-1/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/skill-2/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/manual/SKILL.md
   test ! -e ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/cat-a
   test ! -e ${nestedBundle.forTarget { name = "agents"; flatten = true; }}/custom
-  test -f ${nestedBundle.forTarget { name = "codex"; }}/cat-a/skill-1/SKILL.md
-  test -f ${nestedBundle.forTarget { name = "codex"; }}/custom/manual/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} ${nestedBundle.forTarget { name = "codex"; }}/cat-a/skill-2/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} ${nestedBundle.forTarget { name = "codex"; }}/custom/manual/SKILL.md
+
+  # Without flattening, equal basenames retain their independent namespaces.
+  for namespace in alpha beta; do
+    cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} \
+      ${collisionBundle.forTarget { name = "agents"; flatten = false; }}/"$namespace"/skill-a/SKILL.md
+  done
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} \
+    ${unrestrictedCollision.forTarget { name = "agents"; flatten = false; }}/cat-a/skill-1/SKILL.md
+  cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} \
+    ${unrestrictedCollision.forTarget { name = "agents"; flatten = false; }}/different/skill-1/SKILL.md
+
+  # Filtering must remove the colliding skill before choosing flat paths.
+  cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} \
+    ${filteredCollision.forTarget { name = "agents"; flatten = true; }}/skill-1/SKILL.md
+  test ! -e ${filteredCollision.forTarget { name = "agents"; flatten = true; }}/cat-a
+  test ! -e ${filteredCollision.forTarget { name = "agents"; flatten = true; }}/different
 
   mkdir -p "$out"
   touch "$out/ok"
