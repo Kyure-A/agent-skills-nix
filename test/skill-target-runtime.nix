@@ -152,10 +152,10 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test ! -e "$root/custom/codex-only"
       test ! -e "$root/disabled"
       test ! -e "$root/other-system"
-      jq -e --arg bundle '${initialBundle.forTarget "codex"}' \
+      jq -e --arg bundle '${initialBundle.forTarget { name = "codex"; }}' \
         '.bundle == $bundle and .target == "codex"' \
         "$root/codex/.agent-skills-managed.json" >/dev/null
-      jq -e --arg bundle '${initialBundle.forTarget "custom"}' \
+      jq -e --arg bundle '${initialBundle.forTarget { name = "custom"; }}' \
         '.bundle == $bundle and .target == "custom"' \
         "$root/custom/.agent-skills-managed.json" >/dev/null
 
@@ -216,7 +216,7 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test -f "$matching_root/shared/codex-only/SKILL.md"
       test ! -e "$matching_root/shared/custom-only"
       test ! -e "$matching_root/shared/shared"
-      jq -e --arg bundle '${matchingBundle.forTarget "claude"}' \
+      jq -e --arg bundle '${matchingBundle.forTarget { name = "claude"; }}' \
         '.bundle == $bundle and .target == "claude"' \
         "$matching_root/shared/.agent-skills-managed.json" >/dev/null
     '') [ "local" "global" ]}

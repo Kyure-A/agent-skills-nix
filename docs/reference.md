@@ -45,7 +45,7 @@ then passes the result as `allowlist` and `skills.explicit` as `skills` to
 `selectSkills`. See [configuration](./configuration.md) for discovery filters,
 selection validation, renaming, and customisation.
 
-`mkBundle` exposes `bundle.forTarget "claude"` to filter the selection by each
+`mkBundle` exposes `bundle.forTarget { name = "claude"; }` to filter the selection by each
 skill's `agents` list. Pass the bundle derivation directly to the install
 helpers to retain this metadata. A plain store path does not carry it.
 

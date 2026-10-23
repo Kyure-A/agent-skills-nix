@@ -151,46 +151,46 @@ assert expect (evaluationSucceeds (programFor [ "oh-my-pi" ] { })) "oh-my-pi mus
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target; })) "custom target keys must be accepted";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { enable = false; }; })) "disabled custom targets must remain valid";
 assert expect (evaluationSucceeds (programFor [ "custom" ] { custom = target // { systems = [ "another-system" ]; }; })) "system-filtered targets must remain valid";
-assert expect (!evaluationSucceeds ((collisionBundle.forTarget "oh-my-pi").drvPath)) "flattened oh-my-pi paths must reject collisions";
-assert expect (evaluationSucceeds ((collisionBundle.forTarget "codex").drvPath)) "other targets must retain separate prefixed paths";
-assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget "oh-my-pi").drvPath)) "nested and explicit IDs with the same basename must collide";
-assert expect (evaluationSucceeds ((unrestrictedCollision.forTarget "codex").drvPath)) "other targets must preserve the distinct nested paths";
-assert expect (evaluationSucceeds ((filteredCollision.forTarget "oh-my-pi").drvPath)) "skills routed away from oh-my-pi must not collide";
+assert expect (!evaluationSucceeds ((collisionBundle.forTarget { name = "oh-my-pi"; }).drvPath)) "flattened oh-my-pi paths must reject collisions";
+assert expect (evaluationSucceeds ((collisionBundle.forTarget { name = "codex"; }).drvPath)) "other targets must retain separate prefixed paths";
+assert expect (!evaluationSucceeds ((unrestrictedCollision.forTarget { name = "oh-my-pi"; }).drvPath)) "nested and explicit IDs with the same basename must collide";
+assert expect (evaluationSucceeds ((unrestrictedCollision.forTarget { name = "codex"; }).drvPath)) "other targets must preserve the distinct nested paths";
+assert expect (evaluationSucceeds ((filteredCollision.forTarget { name = "oh-my-pi"; }).drvPath)) "skills routed away from oh-my-pi must not collide";
 pkgs.runCommand "agent-skills-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
 
   ${assertContents bundle (builtins.attrNames selection)}
-  ${assertContents (bundle.forTarget "claude") [ "fixture" "shared" "nullable" "claude-only" "both" ]}
-  ${assertContents (bundle.forTarget "codex") [ "fixture" "shared" "nullable" "both" "transformed" ]}
-  ${assertContents (bundle.forTarget "custom") [ "fixture" "shared" "nullable" "custom-only" ]}
-  ${assertContents (bundle.forTarget "oh-my-pi") [ "fixture" "shared" "nullable" "oh-my-pi-only" ]}
-  ${assertContents (bundle.forTarget "gemini") [ "fixture" "shared" "nullable" ]}
+  ${assertContents (bundle.forTarget { name = "claude"; }) [ "fixture" "shared" "nullable" "claude-only" "both" ]}
+  ${assertContents (bundle.forTarget { name = "codex"; }) [ "fixture" "shared" "nullable" "both" "transformed" ]}
+  ${assertContents (bundle.forTarget { name = "custom"; }) [ "fixture" "shared" "nullable" "custom-only" ]}
+  ${assertContents (bundle.forTarget { name = "oh-my-pi"; }) [ "fixture" "shared" "nullable" "oh-my-pi-only" ]}
+  ${assertContents (bundle.forTarget { name = "gemini"; }) [ "fixture" "shared" "nullable" ]}
 
   # Filtering must retain materialized transformations and the source content.
-  grep -q 'Target-specific transform' ${bundle.forTarget "codex"}/transformed/SKILL.md
-  grep -q '# Test Skill' ${bundle.forTarget "codex"}/transformed/SKILL.md
-  cmp ${bundle}/transformed/SKILL.md ${bundle.forTarget "codex"}/transformed/SKILL.md
+  grep -q 'Target-specific transform' ${bundle.forTarget { name = "codex"; }}/transformed/SKILL.md
+  grep -q '# Test Skill' ${bundle.forTarget { name = "codex"; }}/transformed/SKILL.md
+  cmp ${bundle}/transformed/SKILL.md ${bundle.forTarget { name = "codex"; }}/transformed/SKILL.md
   test ! -e ${bundle}/disabled
   test -f ${hiddenBundle}/hidden/SKILL.md
-  test -z "$(find ${hiddenBundle.forTarget "claude"} -mindepth 1 -maxdepth 1 -print -quit)"
+  test -z "$(find ${hiddenBundle.forTarget { name = "claude"; }} -mindepth 1 -maxdepth 1 -print -quit)"
 
-  test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-a/SKILL.md
-  test -f ${prefixedBundle.forTarget "oh-my-pi"}/skill-b/SKILL.md
-  test ! -e ${prefixedBundle.forTarget "oh-my-pi"}/alpha
-  test -f ${prefixedBundle.forTarget "oh-my-pi"}/renamed/SKILL.md
-  test ! -e ${prefixedBundle.forTarget "oh-my-pi"}/explicit
-  test -f ${prefixedBundle.forTarget "codex"}/explicit/renamed/SKILL.md
-  test -f ${prefixedBundle.forTarget "codex"}/alpha/skill-a/SKILL.md
-  test ! -e ${prefixedBundle.forTarget "codex"}/skill-a
+  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/skill-a/SKILL.md
+  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/skill-b/SKILL.md
+  test ! -e ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/alpha
+  test -f ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/renamed/SKILL.md
+  test ! -e ${prefixedBundle.forTarget { name = "oh-my-pi"; }}/explicit
+  test -f ${prefixedBundle.forTarget { name = "codex"; }}/explicit/renamed/SKILL.md
+  test -f ${prefixedBundle.forTarget { name = "codex"; }}/alpha/skill-a/SKILL.md
+  test ! -e ${prefixedBundle.forTarget { name = "codex"; }}/skill-a
 
-  test -f ${nestedBundle.forTarget "oh-my-pi"}/skill-1/SKILL.md
-  test -f ${nestedBundle.forTarget "oh-my-pi"}/skill-2/SKILL.md
-  test -f ${nestedBundle.forTarget "oh-my-pi"}/manual/SKILL.md
-  test ! -e ${nestedBundle.forTarget "oh-my-pi"}/cat-a
-  test ! -e ${nestedBundle.forTarget "oh-my-pi"}/custom
-  test -f ${nestedBundle.forTarget "codex"}/cat-a/skill-1/SKILL.md
-  test -f ${nestedBundle.forTarget "codex"}/custom/manual/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/skill-1/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/skill-2/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "oh-my-pi"; }}/manual/SKILL.md
+  test ! -e ${nestedBundle.forTarget { name = "oh-my-pi"; }}/cat-a
+  test ! -e ${nestedBundle.forTarget { name = "oh-my-pi"; }}/custom
+  test -f ${nestedBundle.forTarget { name = "codex"; }}/cat-a/skill-1/SKILL.md
+  test -f ${nestedBundle.forTarget { name = "codex"; }}/custom/manual/SKILL.md
 
   mkdir -p "$out"
   touch "$out/ok"

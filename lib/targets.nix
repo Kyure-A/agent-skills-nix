@@ -125,7 +125,7 @@ let
     assert lib.assertMsg (unknownTargetNames == [ ])
       "agent-skills: unknown skill agents target(s): ${lib.concatStringsSep ", " unknownTargetNames}; use a built-in target name or define a matching targets attribute";
     lib.mapAttrs
-      (name: _: if hasBundleMetadata && bundle ? forTarget then bundle.forTarget name else bundle)
+      (name: _: if hasBundleMetadata && bundle ? forTarget then bundle.forTarget { inherit name; } else bundle)
       (targetsFor { inherit targets system; });
 
   # Build an executable that delegates synchronization to the shared runtime.

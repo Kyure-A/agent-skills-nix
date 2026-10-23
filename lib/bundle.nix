@@ -102,6 +102,7 @@ let
   # Materialize bundle in the store, preserving nested paths.
   mkBundle = { pkgs, selection, name ? "agent-skills-bundle" }:
     let
+      bundleName = name;
       skills = map
         (skill: skill // {
           agents = selectionLib.agentsFor skill.id skill;
@@ -111,12 +112,12 @@ let
       skillTargetNames = unique (concatMap (skill: if skill.agents == null then [ ] else skill.agents) skills);
       # Share materialized skills (including transforms and dependencies) across
       # targets instead of dumping and sanitizing the same sources for each one.
-      forTarget = target:
+      forTarget = { name }:
         let
-          allowed = builtins.filter (skill: skill.agents == null || builtins.elem target skill.agents) skills;
+          allowed = builtins.filter (skill: skill.agents == null || builtins.elem name skill.agents) skills;
           # omp discovers only immediate children of its skills directory.
           targetPath = skill:
-            if target == "oh-my-pi" then builtins.baseNameOf skill.id else skill.id;
+            if name == "oh-my-pi" then builtins.baseNameOf skill.id else skill.id;
           destinations = map (skill: { inherit (skill) id; path = targetPath skill; }) allowed;
           checkedDestinations = foldl'
             (seen: destination:
@@ -131,12 +132,12 @@ let
               else seen ++ [ destination ])
             [ ]
             destinations;
-          flatten = target == "oh-my-pi" && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
+          flatten = name == "oh-my-pi" && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
         in
         if !flatten && builtins.length allowed == builtins.length skills then result
         else
-          assert target != "oh-my-pi" || builtins.deepSeq checkedDestinations true;
-          pkgs.runCommand "${name}-filtered" { preferLocalBuild = true; } ''
+          assert name != "oh-my-pi" || builtins.deepSeq checkedDestinations true;
+          pkgs.runCommand "${bundleName}-filtered" { preferLocalBuild = true; } ''
             mkdir -p "$out"
             ${concatMapStringsSep "\n" (skill: ''
               dest=${lib.escapeShellArg (targetPath skill)}
