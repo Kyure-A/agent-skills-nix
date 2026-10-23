@@ -1,7 +1,7 @@
 # Test targets default merging behaviour
 { pkgs, agentLib }:
 
-pkgs.runCommand "agent-skills-targets-test" {} ''
+pkgs.runCommand "agent-skills-targets-test" { } ''
   set -e
 
   echo "=== Testing targetsFor with default targets ==="

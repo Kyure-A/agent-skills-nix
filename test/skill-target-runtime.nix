@@ -78,15 +78,71 @@ let
   plainProgram = agentLib.mkLocalInstallProgram {
     inherit pkgs;
     bundle = plainBundle;
-    targets.plain = { dest = "plain"; structure = "copy-tree"; };
+    targets = {
+      plain = { dest = "plain"; structure = "copy-tree"; };
+      disabled = { enable = false; flatten = true; };
+      other-system = { systems = [ "unsupported-system" ]; flatten = true; };
+    };
+  };
+  plainFlattenProgram = agentLib.mkLocalInstallProgram {
+    inherit pkgs;
+    bundle = plainBundle;
+    targets.plain = { dest = "plain"; structure = "copy-tree"; flatten = true; };
+  };
+  prefixedSources.fixture = {
+    path = ./fixtures/nested-skills;
+    idPrefix = "fixture";
+  };
+  prefixedCatalog = agentLib.discoverCatalog prefixedSources;
+  prefixedBundle = agentLib.mkBundle {
+    inherit pkgs;
+    selection = agentLib.selectSkills {
+      catalog = prefixedCatalog;
+      sources = prefixedSources;
+      allowlist = builtins.attrNames prefixedCatalog;
+    };
+  };
+  flattenGlobalProgram = agentLib.mkSyncProgram {
+    inherit pkgs;
+    bundle = prefixedBundle;
+    targets.agents = agentLib.defaultTargets.agents // { enable = true; flatten = true; };
+    targets.portable = {
+      enable = true;
+      dest = "$HOME/portable";
+      structure = "link";
+      flatten = true;
+    };
+  };
+  flattenLocalProgram = agentLib.mkLocalInstallProgram {
+    inherit pkgs;
+    bundle = prefixedBundle;
+    targets.agents = agentLib.defaultLocalTargets.agents // { enable = true; flatten = true; };
   };
 in
 assert !unknownTarget.success;
+assert !(builtins.tryEval plainFlattenProgram.drvPath).success;
 pkgs.runCommand "agent-skills-target-runtime-test"
 { nativeBuildInputs = [ pkgs.coreutils pkgs.jq pkgs.rsync ]; }
   ''
     set -euo pipefail
     fail() { echo "ERROR: $*" >&2; exit 1; }
+
+    flatten_home="$PWD/flatten-home"
+    flatten_project="$PWD/flatten-project"
+    mkdir -p "$flatten_home" "$flatten_project"
+    HOME="$flatten_home" ${flattenGlobalProgram}/bin/skills-install
+    AGENT_SKILLS_ROOT="$flatten_project" ${flattenLocalProgram}/bin/skills-install-local
+    for dest in "$flatten_home/.agents/skills" "$flatten_project/.agents/skills"; do
+      cmp ${./fixtures/nested-skills/cat-a/skill-1/SKILL.md} "$dest/skill-1/SKILL.md"
+      cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} "$dest/skill-2/SKILL.md"
+      test ! -e "$dest/fixture" || fail "flatten: idPrefix leaked into $dest"
+      test ! -e "$dest/cat-a" || fail "flatten: nested path leaked into $dest"
+    done
+    test -L "$flatten_home/.agents/skills/skill-1"
+    test ! -L "$flatten_project/.agents/skills/skill-1"
+    test -L "$flatten_home/portable"
+    cmp ${./fixtures/nested-skills/cat-a/skill-2/SKILL.md} "$flatten_home/portable/skill-2/SKILL.md"
+    test ! -e "$flatten_home/portable/fixture"
 
     ${lib.concatMapStringsSep "\n" (mode: let
       initialProgram = mkProgram mode initialBundle;
@@ -117,10 +173,10 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test ! -e "$root/custom/codex-only"
       test ! -e "$root/disabled"
       test ! -e "$root/other-system"
-      jq -e --arg bundle '${initialBundle.forTarget "codex"}' \
+      jq -e --arg bundle '${initialBundle.forTarget { name = "codex"; }}' \
         '.bundle == $bundle and .target == "codex"' \
         "$root/codex/.agent-skills-managed.json" >/dev/null
-      jq -e --arg bundle '${initialBundle.forTarget "custom"}' \
+      jq -e --arg bundle '${initialBundle.forTarget { name = "custom"; }}' \
         '.bundle == $bundle and .target == "custom"' \
         "$root/custom/.agent-skills-managed.json" >/dev/null
 
@@ -181,7 +237,7 @@ pkgs.runCommand "agent-skills-target-runtime-test"
       test -f "$matching_root/shared/codex-only/SKILL.md"
       test ! -e "$matching_root/shared/custom-only"
       test ! -e "$matching_root/shared/shared"
-      jq -e --arg bundle '${matchingBundle.forTarget "claude"}' \
+      jq -e --arg bundle '${matchingBundle.forTarget { name = "claude"; }}' \
         '.bundle == $bundle and .target == "claude"' \
         "$matching_root/shared/.agent-skills-managed.json" >/dev/null
     '') [ "local" "global" ]}

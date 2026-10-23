@@ -102,6 +102,7 @@ let
   # Materialize bundle in the store, preserving nested paths.
   mkBundle = { pkgs, selection, name ? "agent-skills-bundle" }:
     let
+      bundleName = name;
       skills = map
         (skill: skill // {
           agents = selectionLib.agentsFor skill.id skill;
@@ -111,16 +112,34 @@ let
       skillTargetNames = unique (concatMap (skill: if skill.agents == null then [ ] else skill.agents) skills);
       # Share materialized skills (including transforms and dependencies) across
       # targets instead of dumping and sanitizing the same sources for each one.
-      forTarget = target:
+      forTarget = { name, flatten ? false }:
         let
-          allowed = builtins.filter (skill: skill.agents == null || builtins.elem target skill.agents) skills;
+          allowed = builtins.filter (skill: skill.agents == null || builtins.elem name skill.agents) skills;
+          targetPath = skill:
+            if flatten then builtins.baseNameOf skill.id else skill.id;
+          destinations = map (skill: { inherit (skill) id; path = targetPath skill; }) allowed;
+          checkedDestinations = foldl'
+            (seen: destination:
+              let
+                collision = lib.findFirst
+                  (previous: previous.path == destination.path)
+                  null
+                  seen;
+              in
+              if collision != null then
+                throw "agent-skills: flattened skill path collision at '${destination.path}': ${collision.id} and ${destination.id}"
+              else seen ++ [ destination ])
+            [ ]
+            destinations;
+          needsFlattening = flatten && lib.any (skill: lib.hasInfix "/" skill.id) allowed;
         in
-        if builtins.length allowed == builtins.length skills then result
+        assert !flatten || builtins.deepSeq checkedDestinations true;
+        if !needsFlattening && builtins.length allowed == builtins.length skills then result
         else
-          pkgs.runCommand "${name}-filtered" { preferLocalBuild = true; } ''
+          pkgs.runCommand "${bundleName}-filtered" { preferLocalBuild = true; } ''
             mkdir -p "$out"
             ${concatMapStringsSep "\n" (skill: ''
-              dest=${lib.escapeShellArg skill.id}
+              dest=${lib.escapeShellArg (targetPath skill)}
               mkdir -p "$out/$(dirname "$dest")"
               ln -s ${lib.escapeShellArg "${result}/${skill.id}"} "$out/$dest"
             '') allowed}

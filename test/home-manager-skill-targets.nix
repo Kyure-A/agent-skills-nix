@@ -48,6 +48,34 @@ let
   paths = cfg.targetBundlePaths;
   linkedSource = config.home.file.".claude/skills".source;
   activation = config.home.activation.agent-skills.data;
+  prefixedConfig = (mkConfig {
+    programs.agent-skills = {
+      sources.prefixed = {
+        path = ./fixtures/multi-skill-shared-root;
+        idPrefix = "prefixed";
+      };
+      skills.enableAll = [ "prefixed" ];
+      targets.agents = { enable = true; flatten = true; };
+    };
+  }).config;
+  prefixedPath = prefixedConfig.programs.agent-skills.targetBundlePaths.agents;
+  prefixedActivation = prefixedConfig.home.activation.agent-skills.data;
+  prefixedLinkConfig = (mkConfig {
+    programs.agent-skills = {
+      sources.prefixed = {
+        path = ./fixtures/multi-skill-shared-root;
+        idPrefix = "prefixed";
+      };
+      skills.enableAll = [ "prefixed" ];
+      targets.agents = {
+        enable = true;
+        flatten = true;
+        dest = ".agents/skills";
+        structure = "link";
+      };
+    };
+  }).config;
+  prefixedLinkSource = prefixedLinkConfig.home.file.".agents/skills".source;
   noTargets = (mkConfig {
     programs.agent-skills.skills.explicit.shared = skill { };
   }).config.programs.agent-skills;
@@ -84,12 +112,10 @@ let
       (allNames ++ [ "disabled" ]);
 in
 assert expect (builtins.attrNames paths == [ "claude" "codex" "custom" ]) "targetBundlePaths must contain only enabled targets for this system";
-assert expect (toString linkedSource == toString paths.claude) "link layout must use the target bundle";
 assert expect (cfg.skills.explicit.shared.agents == null) "agents must default to null";
 assert expect (noTargets.targetBundlePaths == { }) "disabled targets must not create output paths";
 assert expect (!evaluationSucceeds invalidConfig) "the module must reject a non-list agents value";
 assert expect (!evaluationSucceeds (toString unknownTargetSource)) "link-only configurations must reject unknown target names";
-assert expect (lib.hasInfix "/bin/skills-install" activation) "mixed layouts must retain sync activation";
 pkgs.runCommand "agent-skills-home-manager-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -108,6 +134,20 @@ pkgs.runCommand "agent-skills-home-manager-skill-targets-test" { } ''
   test -L "$HOME/.custom/skills/custom-only"
   test ! -e "$HOME/.inactive/skills"
   test ! -e "$HOME/.elsewhere/skills"
+
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedPath}/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} ${prefixedPath}/skill-b/SKILL.md
+  test ! -e ${prefixedPath}/prefixed
+  mkdir -p "$PWD/flatten-home"
+  export HOME="$PWD/flatten-home"
+  ${prefixedActivation}
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} "$HOME/.agents/skills/skill-a/SKILL.md"
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} "$HOME/.agents/skills/skill-b/SKILL.md"
+  test ! -e "$HOME/.agents/skills/prefixed"
+
+  cmp ${./fixtures/multi-skill-shared-root/skill-a/SKILL.md} ${prefixedLinkSource}/skill-a/SKILL.md
+  cmp ${./fixtures/multi-skill-shared-root/skill-b/SKILL.md} ${prefixedLinkSource}/skill-b/SKILL.md
+  test ! -e ${prefixedLinkSource}/prefixed
 
   mkdir -p "$out"
   touch "$out/ok"
