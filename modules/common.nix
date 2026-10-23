@@ -29,7 +29,7 @@ let
         description = ''
           Destination path for skills. Global targets support $HOME, ~, and
           ''${VAR:-$HOME/...} fallback forms at runtime; local paths are literal.
-          See README.md#default-target-paths for the full default path matrix.
+          See docs/installation.md#default-target-paths for the full default path matrix.
           Examples:
             - "$HOME/.agents/skills" (global)
             - ".agents/skills" (project-local)

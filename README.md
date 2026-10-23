@@ -1,198 +1,128 @@
 # agent-skills-nix
 
-Declarative management of Agent Skills (directories containing `SKILL.md`) with flake-pinned sources, discovery, selection, bundling, Home Manager integration, and skills-only Agent Plugin export.
+Manage Agent Skills (directories containing `SKILL.md`) declaratively with Nix.
+Pin skill sources, select the skills you need, and install them through Home
+Manager or project-local commands. You can also export selected skills as a
+self-contained Agent Plugin.
 
-## Concepts
+Nothing is installed by default: choose both skills and targets explicitly.
 
-- **sources**: Named inputs or paths pointing at a skills root (`subdir`). They can be written directly as before, or generated from the optional source registry. Optional `idPrefix` namespaces discovered skill IDs to avoid collisions across sources.
-- **discover**: Recursively scans sources for directories that contain `SKILL.md`, producing a catalog. Skills can be nested (e.g. `ecosystem/c-ecosystem/`) and their IDs use `/` as separator.
-- **skills.enable / skills.enableAll / skills.explicit**: Declaratively pick discovered skills, enable-all (global or by source list), and explicitly specified ones. Explicit skills can restrict installation to named targets with `agents`; no accidental auto-install unless you opt in.
-- **Agent Plugin export**: Maps selected catalog entries to portable skill names and produces a self-contained, skills-only plugin directory.
-- **targets**: Agent-specific destinations synced from a store bundle (structure: `link`, `symlink-tree`, `copy-tree`). Targets are opt-in (`enable = false` by default). Runtime destinations support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms without general shell evaluation. See **Default target paths** below.
+## Quick start with Home Manager
 
-## Source filters
-
-Each source supports optional filters to control discovery:
-
-- **`idPrefix`** (`null | string`, default: `null`): Prefix prepended to discovered skill IDs. Useful when multiple sources expose the same relative path, e.g. `idPrefix = "openai";` turns `pdf` into `openai/pdf`.
-- **`filter.maxDepth`** (`null | int`, default: `null`): Maximum recursion depth for SKILL.md discovery. `null` = unlimited (capped internally at 100 to guard against symlink loops), `0` = source root only, `1` = immediate children, `2` = one level of nesting. Negative depths are rejected.
-- **`filter.nameRegex`** (`null | string`, default: `null`): Regex matched against the skill's relative path (e.g. `cat-a/skill-1`) to restrict discovery.
-
-If two sources both expose `pdf`, prefix them explicitly to keep IDs unique:
+For an existing flake-based Home Manager configuration, add these inputs to
+your flake:
 
 ```nix
-sources.openai = {
-  input = "openai-skills";
-  subdir = "skills";
-  idPrefix = "openai";
+inputs = {
+  agent-skills.url = "github:Kyure-A/agent-skills-nix";
+  anthropic-skills = {
+    url = "github:anthropics/skills";
+    flake = false;
+  };
 };
-
-sources.anthropic = {
-  input = "anthropic-skills";
-  subdir = "skills";
-  idPrefix = "anthropic";
-};
-
-skills.enable = [ "openai/pdf" "anthropic/pdf" ];
 ```
 
-Direct sources, Home Manager sources, and registry manifests use the same
-validation for `subdir`, `idPrefix`, and `filter`. Unknown source/filter fields,
-invalid types, unsafe relative paths, and invalid ID prefixes fail before
-selection. A source must provide `path` or `input`; `path` takes precedence
-when both are set.
+Capture the flake inputs with `outputs = inputs@{ ... }: ...;`. Add
+`inputs.agent-skills.homeManagerModules.default` to your existing Home Manager
+`modules` list and pass `extraSpecialArgs = { inherit inputs; };` to
+`home-manager.lib.homeManagerConfiguration`. This makes the named skill input
+available to the module.
 
-## Source registry (optional)
-
-The source registry removes the need to declare every skill repository as a
-flake input. It uses [npins](https://github.com/andir/npins), the pin manager
-recommended by the [nix.dev remote-source guide](https://nix.dev/guides/recipes/dependency-management.html),
-for revision resolution and hashing. Existing `sources.<name>.input` and
-`sources.<name>.path` declarations remain supported and can be mixed with this
-approach.
-
-Keep one human-edited Nix manifest per source and commit the generated JSON
-lock:
-
-```text
-registry/
-├── sources/
-│   ├── anthropic.nix
-│   └── internal.nix
-└── sources.lock.json
-```
-
-For a GitHub source that follows a branch:
+Then add the following to your Home Manager configuration:
 
 ```nix
-# registry/sources/anthropic.nix
-{
-  pin = {
-    type = "github";
-    owner = "anthropics";
-    repo = "skills";
-    branch = "main";
+programs.agent-skills = {
+  enable = true;
+
+  sources.anthropic = {
+    input = "anthropic-skills";
+    subdir = "skills";
   };
 
-  subdir = "skills";
-  idPrefix = "anthropic";
-  filter.maxDepth = 2;
-}
-```
-
-`pin.type` can be `github`, `git`, or `tarball`. Git and GitHub pins accept
-`branch`, `at`, `submodules`, `preReleases`, `versionUpperBound`, and
-`releasePrefix`; generic Git pins additionally require `url` and accept
-`forge`. If `branch` is omitted, npins follows releases and writes a
-`GitRelease` pin. Tarball pins require `url` and optionally accept `mutable`.
-The remaining fields (`subdir`, `idPrefix`, and `filter`) are the same source
-discovery settings as the existing DSL.
-
-Load the lock as an ordinary path-backed `sources` value:
-
-```nix
-sources = agentLib.sourcesFromLock {
-  manifestsDir = ./registry/sources;
-  lockFile = ./registry/sources.lock.json;
-};
-
-catalog = agentLib.discoverCatalog sources;
-```
-
-Expose the updater in a consumer flake:
-
-```nix
-sourceLockProgram = agentLib.mkSourceLockProgram { inherit pkgs; };
-
-apps.${system}.skills-sources-lock = {
-  type = "app";
-  program = "${sourceLockProgram}/bin/skills-sources-lock";
+  skills.enable = [ "frontend-design" "skill-creator" ];
+  targets.claude.enable = true;
 };
 ```
 
-Then update all sources together:
+Apply your Home Manager configuration as usual. The selected skills are synced
+to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`. Enable other agents with
+`targets.<name>.enable = true;`; see [default target paths](#default-target-paths).
+For an existing non-empty skills directory, see
+[destination ownership](./docs/installation.md#destination-ownership).
 
-```console
-nix run .#skills-sources-lock
-```
+The [complete quickstart examples](./examples/quickstart/README.md) show both
+ways to arrange the inputs:
 
-The command validates and normalizes every manifest through the same Nix
-loader used by consumers, passes every npins argument without shell evaluation,
-and resolves all pins in a temporary sibling directory. The generated lock has
-an agent-skills schema-v1 wrapper containing the normalized manifests and an
-npins version-8 lock. `sourcesFromLock` requires the current normalized
-manifests to match that snapshot exactly, so changing a repository, branch, or
-discovery option without updating the lock fails evaluation. The updater sorts
-JSON keys and only then atomically renames the completed lock into place. A
-failed manifest or fetch leaves the old lock byte-for-byte unchanged; rerunning
-with unchanged upstream revisions produces the same lock bytes. See the complete
-[`examples/source-registry`](./examples/source-registry) flake.
+- [Main flake](./examples/quickstart/main/flake.nix): keep agent-skills and skill
+  sources alongside your Home Manager inputs.
+- [Child flake](./examples/quickstart/child/flake.nix): keep the skill inputs in a
+  separate catalog flake.
+
+## How it works
+
+1. **Sources** point to skill roots in flake inputs, local paths, or an optional
+   [source registry](./docs/source-registry.md).
+2. **Discovery** scans for `SKILL.md` files and builds a catalog. Nested skill
+   IDs use `/`, such as `documents/pdf`; `idPrefix` adds a source namespace.
+3. **Selection** chooses catalog entries with `skills.enable` or
+   `skills.enableAll`, and custom declarations with `skills.explicit`.
+4. **Bundling** builds the selection in the Nix store, including any content
+   transforms and package dependencies.
+5. **Targets** install the bundle for enabled agents. Explicit skills can limit
+   installation to named targets with `agents`.
+
+## Guides and examples
+
+| Task | Guide | Example |
+|------|-------|---------|
+| Configure sources, select skills, and customise content | [Configuration](./docs/configuration.md) | [Transforms and dependencies](./examples/skill-customization/explicit-transform.nix) |
+| Install skills in a project | [Installation](./docs/installation.md#project-local-installation) | [Local install flake](./examples/local-install/flake.nix) |
+| Install automatically on shell entry | [Development shells](./docs/installation.md#development-shells) | [devShell flake](./examples/devshell/flake.nix) |
+| Pin sources without a flake input per repository | [Source registry](./docs/source-registry.md) | [Registry flake](./examples/source-registry/README.md) |
+| Export a portable skills-only plugin | [Agent Plugin export (experimental)](./docs/agent-plugin.md) | [Plugin flake](./examples/agent-plugin/README.md) |
+| Build your own integration | [Library and flake reference](./docs/reference.md) | [Library snippet](./examples/library-functions/snippet.nix) |
+
+The root flake has an empty catalog and no enabled targets. Installation
+commands such as `nix run .#skills-install-local` must run against your own
+configured flake. Home Manager installs skills when you activate your home
+configuration; it does not add apps to your flake.
 
 ## Default target paths
 
+Use `agents` to install a shared skill set for tools that discover
+`.agents/skills`. Claude Code uses its own skill directory:
+
 | Target | Global path | Local path |
 |--------|-------------|------------|
-| agents | `$HOME/.agents/skills` | `.agents/skills` |
-| codex | `${CODEX_HOME:-$HOME/.codex}/skills` | `.codex/skills` |
-| opencode | `$HOME/.config/opencode/skills` | `.opencode/skills` |
+| agents (shared) | `$HOME/.agents/skills` | `.agents/skills` |
 | claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills` | `.claude/skills` |
-| copilot | `$HOME/.copilot/skills` | `.github/skills` |
-| cursor | `$HOME/.cursor/skills` | `.cursor/skills` |
-| windsurf | `$HOME/.codeium/windsurf/skills` | `.windsurf/skills` |
-| antigravity | `$HOME/.gemini/antigravity/skills` | `.agents/skills` |
-| gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
-| pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
-| oh-my-pi | `$HOME/.omp/agent/skills` | `.omp/skills` |
 
-For `oh-my-pi`, every selected skill is installed as an immediate child of
-the skills directory, since omp does not discover nested skill paths. The last
-component of the ID becomes the directory name: `team/tools/writing` installs
-as `writing`, including for explicitly named skills. Other targets keep the
-full ID path. If two selected skills have the same final component, evaluation
-fails instead of silently overwriting one.
+Product-specific targets remain available for separate installation destinations
+and features that require a dedicated path. See the
+[full target list](./docs/installation.md#default-target-paths).
 
-## Quick start (child flake + Home Manager)
+All built-in targets are disabled by default. Global targets use
+`symlink-tree`; local targets use `copy-tree`. See
+[target configuration](./docs/installation.md#target-configuration) for custom
+paths, structures, and system filters.
 
-Put skills config in a small child flake so the only pinned inputs there are skill sources.
+## Development
 
-Use the quickstart example:
+The root `flake.nix` depends only on nixpkgs. It wires the library, packages,
+apps, checks, and Home Manager module through ordinary Nix imports:
 
-- Overview: [`examples/quickstart/README.md`](./examples/quickstart/README.md)
-- Main (tightly coupled): [`examples/quickstart/main/flake.nix`](./examples/quickstart/main/flake.nix)
-- Child (separated catalog): [`examples/quickstart/child/flake.nix`](./examples/quickstart/child/flake.nix)
+| Directory | Contents |
+|-----------|----------|
+| `lib/` | Discovery, selection, bundling, targets, registry, and plugin export |
+| `modules/` | Shared options and Home Manager integration |
+| `nix/` | Package, app, and default configuration definitions |
+| `scripts/` | Synchronization, source locking, and plugin validation runtimes |
+| `test/` | Library and runtime checks, plus Home Manager integration tests |
+| `examples/` | Consumer configurations |
 
-Notes:
-
-- In `main`, `agent-skills` and skill sources are listed directly in the top-level inputs.
-- In `child`, top-level only depends on `skills-catalog = path:./skills`; skills inputs live under `./skills/flake.nix`.
-- If you use source `input` references in your module config, pass flake `inputs` to Home Manager via `extraSpecialArgs`.
-- To enable a default target, set `targets.<name>.enable = true;` (e.g. `targets.claude.enable = true;`).
-- `structure = "link"` uses `home.file` symlinks; `symlink-tree` and `copy-tree` run in `home.activation`.
-- `symlink-tree` uses `rsync -a --delete` (preserve symlinks); `copy-tree` uses `rsync -aL --delete` (dereference symlinks).
-- Runtime `dest` values support `$HOME`, `~`, and `${VAR:-$HOME/...}` fallback forms (e.g. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`). Home Manager's `link` structure requires a static path and uses the fallback path.
-- Symlinks inside skills are preserved when their target stays inside the source root; escaping or dangling ones are dropped. See [Symlinks inside skills](#symlinks-inside-skills).
-
-## Flake outputs
-
-- `packages.<system>.agent-skills-bundle`: Store bundle of selected skills (empty by default; configure in consumers).
-- `apps.<system>.skills-install`: Sync selected skills to enabled global targets (see **Default target paths**). Unrestricted bundles support destination overrides with `AGENT_SKILLS_DESTS`.
-- `apps.<system>.skills-install-local`: Sync selected skills to enabled local targets (see **Default target paths**) using `copy-tree`. Override root with `AGENT_SKILLS_ROOT`; unrestricted bundles support destination overrides with `AGENT_SKILLS_LOCAL_DESTS`.
-- `apps.<system>.skills-list`: JSON view of the default catalog.
-- `apps.<system>.skills-sources-lock`: Resolve `registry/sources/*.nix` and atomically update `registry/sources.lock.json`.
-- `checks.<system>.skills`: Sanity check that the bundle builds.
-- `homeManagerModules.default`: Home Manager module implementing the DSL above.
-- `lib.agent-skills`: Helper functions (`discoverCatalog`, `selectSkills`, `mkBundle`, `bundlesForTargets`, `mkAgentPlugin`, `loadSourceManifests`, `sourcesFromLock`, `mkSourceLockProgram`, `mkSyncProgram`, `mkLocalInstallProgram`, compatibility wrappers `mkSyncScript` / `mkLocalInstallScript`, `mkShellHook`, `catalogJson`, `defaultConfig`).
-
-## Development structure
-
-The root `flake.nix` depends only on nixpkgs and explicitly wires the library,
-packages, apps, checks, and Home Manager module with ordinary Nix imports.
-Build and app definitions live under `nix/`; runtime and domain logic live in
-`scripts/`, `lib/`, `modules/`, and `test/`.
-
-Home Manager is a test-only dependency declared in `test/flake.nix`. That flake
-tests the root flake through a relative path input and follows its nixpkgs input,
-so consumers do not inherit a Home Manager dependency.
+Home Manager is a test-only dependency in `test/flake.nix`, which imports the
+root flake through a relative path and follows its nixpkgs input. Consumers do
+not inherit a Home Manager dependency.
 
 Run both check suites from the repository root:
 
@@ -208,249 +138,5 @@ nix flake update
 nix flake update --flake ./test
 ```
 
-CI runs both suites, and the dependency update workflow updates both lock files.
-
-## Library functions
-
-See [`examples/library-functions/snippet.nix`](./examples/library-functions/snippet.nix).
-
-`discoverCatalog` recursively discovers `SKILL.md` directories and generates `/`-separated IDs for nested skills (e.g. `cat-a/skill-1`). Set `idPrefix` on a source to namespace discovered IDs (for example, `openai/pdf`). It enforces `SKILL.md` presence and rejects duplicate IDs after prefixing (error messages include absolute paths for both conflicting sources). `selectSkills` errors on unknown allowlist entries or missing files, preventing accidental drift. (Home Manager maps `skills.enable` → `allowlist` and `skills.explicit` → `skills`.)
-
-Selection validates enabled declarations before returning its result, including
-unknown source names in `enableAll` and invalid transforms or packages. Explicit
-skills use `rename` as their final output ID; an omitted or `null` rename uses
-the declaration's name. Selection keys and entry IDs always match. Collisions
-are checked after renaming, both against discovered selections and between
-explicit skills. For example, `skills.explicit.original = { from = "local";
-path = "pdf"; rename = "documents/pdf"; };` installs to `documents/pdf/`.
-
-`loadSourceManifests` loads, validates, and normalizes a directory of per-source
-Nix manifests. `sourcesFromLock` verifies them against an agent-skills
-schema-v1 JSON lock (containing an npins version-8 pin set) and returns the same
-path-backed source shape accepted by `discoverCatalog`. `mkSourceLockProgram`
-builds the updater used by the `skills-sources-lock` app.
-
-`mkSyncProgram` returns a `skills-install` executable after filtering enabled targets for the requested system. `mkLocalInstallProgram` is its project-local wrapper and returns `skills-install-local`. Both serialize a versioned JSON configuration and invoke the shared synchronization runtime; they do not return inline shell source. Existing consumer flakes can continue using `mkSyncScript` and `mkLocalInstallScript`; these compatibility wrappers preserve their original return types while delegating to the shared runtime. `mkShellHook` runs the local program from a development shell.
-
-`mkBundle { inherit pkgs selection; }` builds the full selection and exposes
-`bundle.forTarget "claude"` for a bundle filtered by each skill's `agents` list.
-Pass the bundle derivation directly to `mkSyncProgram`, `mkLocalInstallProgram`,
-or `mkShellHook` to apply that filtering automatically for each named target.
-`bundlesForTargets { inherit bundle targets system; }` validates the target
-names and returns the filtered bundles for enabled targets on that system.
-A plain store path does not carry selection metadata. Home Manager exposes
-the full selection as `programs.agent-skills.bundlePath` and the filtered
-bundles for enabled targets on the current system as
-`programs.agent-skills.targetBundlePaths`.
-
-## Agent Plugin export (experimental)
-
-`mkAgentPlugin` turns an explicit map of selected skills into a skills-only
-plugin for ChatGPT and Codex. It follows OpenAI's current
-[plugin packaging format](https://developers.openai.com/plugins/build/plugins):
-the manifest is written to `.codex-plugin/plugin.json`, while the exported
-skills live directly under `skills/`.
-
-```nix
-plugin = agentLib.mkAgentPlugin {
-  inherit pkgs;
-
-  manifest = {
-    name = "document-tools";
-    version = "0.1.0";
-    description = "Portable document workflows";
-  };
-
-  skills = {
-    pdf = selection."openai/pdf";
-  };
-};
-```
-
-The attribute names in `skills` become the exported skill directory names.
-This explicit mapping flattens catalog IDs such as `openai/pdf` into portable
-names such as `pdf`; the matching `SKILL.md` frontmatter must use that same
-name. The exporter adds `"skills": "./skills/"` to the manifest. Per-skill
-`agents` restrictions do not filter plugin exports; the explicit export map
-determines their contents.
-
-The initial exporter deliberately supports skills only. A selected skill with
-`packages` or a `transform` is rejected because those bundle features can
-create output that is not portable outside the Nix store. Each accepted skill
-is copied with its payload into the result, internal links are materialized,
-and the completed plugin contains no symlinks. See the runnable
-[`examples/agent-plugin`](./examples/agent-plugin) flake.
-
-The exporter owns the manifest's `skills` field and rejects `apps`,
-`mcpServers`, and `hooks`. Plugin-level asset fields such as `composerIcon`,
-`logo`, `logoDark`, and `screenshots` are also outside this initial API; keep
-visual assets inside individual skills instead. If present, `defaultPrompt`
-supports at most three entries of 128 characters each. Plugin-bundled skills
-must follow the Agent Skills naming and description rules, and cannot set
-`disable-model-invocation` to `true`.
-
-## Skill customisation
-
-### Install skills only for selected agents
-
-Set `agents` on an explicit skill to choose the named targets that receive it:
-
-```nix
-programs.agent-skills = {
-  targets.claude.enable = true;
-  targets.codex.enable = true;
-  targets.pi.enable = true;
-
-  skills.explicit = {
-    writing = {
-      from = "my-source";
-      agents = [ "claude" "codex" ];
-    };
-    pi-tools = {
-      from = "my-source";
-      agents = [ "pi" ];
-    };
-    shared = {
-      from = "my-source";
-    };
-  };
-};
-```
-
-Here `writing` goes to Claude and Codex, `pi-tools` goes to Pi, and `shared`
-goes to all three. Omitted `agents` or `agents = null;` allows every enabled
-target on the current system; `agents = [];` installs the skill nowhere while
-keeping it in the full bundle. Skills selected through `skills.enable` or
-`skills.enableAll` also go to every enabled target.
-
-Names match `targets` attribute keys, including custom targets, regardless of
-their `dest` paths. Listing a target never enables it or overrides its `systems`
-filter. Unknown names fail evaluation when constructing the install programs;
-known but disabled targets, or targets for another system, are allowed.
-
-These restrictions apply to Home Manager links and activation, global and
-local install programs, and dev-shell hooks. If any selected skill has a
-non-null `agents` list, `AGENT_SKILLS_DESTS` and `AGENT_SKILLS_LOCAL_DESTS`
-overrides are rejected because those paths do not identify a target. Configure
-`targets.<name>.dest` to change destinations while keeping target names.
-
-### Transform content and bundle dependencies
-
-Explicit skills support `transform` and `packages` options to customise SKILL.md and bundle dependencies:
-
-See [`examples/skill-customization/explicit-transform.nix`](./examples/skill-customization/explicit-transform.nix).
-
-This generates:
-
-```
-my-skill/
-├── SKILL.md
-├── jq -> /nix/store/xxx-jq/bin/jq
-└── curl/ -> /nix/store/xxx-curl/bin/  (for packages with multiple binaries)
-```
-
-With SKILL.md containing the transformed content.
-
-**Transform function arguments:**
-- `original`: The original SKILL.md content
-- `dependencies`: A markdown table of package dependencies with local paths (e.g., `./jq`)
-
-**Default behaviour (no transform):**
-- If only `packages` is specified, the default is `dependencies + original`
-- If neither is specified, the original SKILL.md is used as-is
-
-Package binaries are referenced with local paths (`./jq` or `./pkg/` for multi-binary packages) to reduce context consumption when agents load the skill.
-
-## Apps usage
-
-### Global skills (Home Manager)
-
-- List catalog: `nix run .#skills-list`
-- Sync bundle to `$HOME`: `nix run .#skills-install` (for unrestricted bundles, override destinations via `AGENT_SKILLS_DESTS="~/tmp/skills1 ~/tmp/skills2"`)
-
-### Local skills (project-local)
-
-- Sync bundle to current directory: `nix run .#skills-install-local`
-
-Local skills are installed to enabled local targets in **Default target paths** relative to the current working directory (or `AGENT_SKILLS_ROOT` if set). For unrestricted bundles, override destinations via `AGENT_SKILLS_LOCAL_DESTS`; with `agents` restrictions, configure named targets' `dest` values instead.
-Targets respect `enable`, `systems`, and `structure` (default `copy-tree`). To exclude a target, disable it or provide custom targets to `mkLocalInstallProgram`.
-
-Synchronization builds and validates the complete execution plan before
-changing any destination. Targets with the same resolved destination,
-structure, and bundle synchronize once (for example, local `agents` and
-`antigravity` when their selected skills match);
-the first target's name is used for the ownership marker and progress message.
-Different structures or bundles at one destination, or destinations nested
-inside each other, are rejected before synchronization starts.
-
-For unrestricted bundles, destination overrides are separated by spaces, tabs,
-or newlines. Global
-overrides replace the entire target list. Local overrides replace destinations
-in target-name order, retaining each matched target's structure; remaining
-targets keep their configured destinations. Additional overrides use
-`overrideStructure` (`copy-tree` for `mkLocalInstallProgram`). Use configured
-targets for destinations containing whitespace.
-
-The synchronizer refuses to replace a non-empty, unmarked directory. A successful tree sync records ownership in `.agent-skills-managed.json`; set `AGENT_SKILLS_FORCE=1` only when you intentionally want agent-skills to take over an existing destination.
-
-Both apps operate on the flake's default (empty) config; point at your own flake/module for real catalogs.
-
-## Local skills in your project
-
-To install skills locally in your project, use `mkLocalInstallProgram` in your flake:
-
-See [`examples/local-install/flake.nix`](./examples/local-install/flake.nix).
-
-Then run `nix run .#skills-install-local` from your project root to install skills to enabled local targets in **Default target paths**.
-
-### Auto-install with devShell
-
-Use `mkShellHook` to automatically install skills when entering a dev shell:
-
-See [`examples/devshell/flake.nix`](./examples/devshell/flake.nix).
-
-Now `nix develop` will automatically install skills to your project directory.
-
-The hook prints one line per installed target. Under direnv the hook is
-re-evaluated on every shell entry, so pass `quiet = true;` to `mkShellHook` to
-drop those lines; warnings and failures still go to stderr. `AGENT_SKILLS_QUIET=1`
-does the same for any synchronization program at runtime.
-
-## Symlinks inside skills
-
-Symlinks inside skill directories are kept when their textual target stays inside the declared source root (e.g. `../shared` to a sibling at the root). Symlinks whose target escapes the root are dropped, along with any links left dangling by that drop.
-
-- The entire source root is imported into the store, not just each skill subdirectory. Scope the source via `path = ./skills` or `subdir` if the root contains unrelated heavy trees (`.git`, build artefacts).
-- `--safe-links` checks the textual target, not the resolved path. Keep symlinks source-root-relative.
-- Sources resolving to the same physical directory share one store path and one safe-tree derivation.
-
-## Checks / safety
-
-- Disallows skill IDs containing `/..` or leading `/`.
-- Disallows source `idPrefix` values ending with `/`.
-- Verifies `SKILL.md` for discovered and explicit skills.
-- Fails on duplicate IDs across sources.
-- Preserves symlinks that stay inside a declared source root and drops escaping or dangling symlinks when materializing bundles.
-- Rejects `..` traversal in source `subdir` and explicit skill `path` values.
-- Rejects unknown registry fields, unsafe manifest names and subdirectories, unsupported lock versions, and manifest/lock source drift.
-- Caps recursion at 100 levels when maxDepth is null to guard against symlink loops.
-- Passes destinations as JSON data; shell metacharacters and command-substitution syntax are not evaluated as shell code.
-- Tree synchronization validates destination ownership before using `rsync --delete`; managed destinations carry a `.agent-skills-managed.json` marker.
-- Local destinations are resolved beneath `AGENT_SKILLS_ROOT` (or the current directory) and paths that escape that root are rejected.
-
-## Breaking changes
-
-### Managed destination ownership
-
-Tree synchronization now requires a valid `.agent-skills-managed.json` marker before replacing a non-empty destination. For an existing destination created by an older release, inspect it first and set `AGENT_SKILLS_FORCE=1` for the one-time takeover.
-
-### filter.maxDepth default changed from 1 to null
-
-Skill discovery now recurses into nested directories by default. If your source layout relies on flat-only discovery (one level of directories under the source root), add `filter.maxDepth = 1;` to your source configuration:
-
-```nix
-sources.my-skills = {
-  path = ./skills;
-  filter.maxDepth = 1;  # restore flat-only behavior
-};
-```
+CI runs both suites and checks formatting with `nix fmt`. The dependency update
+workflow updates both lock files.
