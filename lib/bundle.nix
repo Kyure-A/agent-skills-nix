@@ -250,16 +250,22 @@ let
             # package name becomes a placeholder here; the build step turns it
             # back into the bare name for multi-binary packages. Already
             # prefixed names get their own placeholder so they never end up as
-            # ././command.
+            # ././command. Which packages are single-binary is unknown until
+            # build time, so overlapping names match longest first: `git-lfs`
+            # stays one command even beside a `git` package.
             hasRewrite = (if skill ? rewriteCommands then skill.rewriteCommands else true) && hasPackages;
-            commandNames = map (pkg: pkg.pname or pkg.name or "unknown") packages;
-            indices = lib.range 0 (builtins.length packages - 1);
+            replacements = builtins.sort (a: b: builtins.stringLength a.from > builtins.stringLength b.from)
+              (concatMap
+                (i:
+                  let name = (builtins.elemAt packages i).pname or (builtins.elemAt packages i).name or "unknown";
+                  in [
+                    { from = "./${name}"; to = prefixedCommandPlaceholder i; }
+                    { from = name; to = commandPlaceholder i; }
+                  ])
+                (lib.range 0 (builtins.length packages - 1)));
             rewrittenContent =
               if hasRewrite then
-                builtins.replaceStrings
-                  (map (name: "./${name}") commandNames ++ commandNames)
-                  (map prefixedCommandPlaceholder indices ++ map commandPlaceholder indices)
-                  originalContent
+                builtins.replaceStrings (map (r: r.from) replacements) (map (r: r.to) replacements) originalContent
               else originalContent;
 
             # Apply transform function or use default (original + dependencies at end)

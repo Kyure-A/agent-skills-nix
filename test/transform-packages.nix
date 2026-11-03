@@ -151,6 +151,34 @@ ${original}
     };
   };
 
+  # Case 10: overlapping names match longest first, so a single-binary
+  # `tool-extra` is not split by a multi-binary `tool` listed before it.
+  overlapSources = {
+    overlap-fixtures = {
+      path = ./fixtures/overlap-skill;
+    };
+  };
+  multiBinTool = pkgs.runCommand "tool" { pname = "tool"; } ''
+    mkdir -p "$out/bin"
+    touch "$out/bin/tool" "$out/bin/tool2"
+  '';
+  singleBinToolExtra = pkgs.runCommand "tool-extra" { pname = "tool-extra"; } ''
+    mkdir -p "$out/bin"
+    touch "$out/bin/tool-extra"
+  '';
+  testSelectionOverlap = agentLib.selectSkills {
+    catalog = agentLib.discoverCatalog overlapSources;
+    allowlist = [];
+    sources = overlapSources;
+    skills = {
+      test-skill-overlap = {
+        from = "overlap-fixtures";
+        path = ".";
+        packages = [ multiBinTool singleBinToolExtra ];
+      };
+    };
+  };
+
   # Case 5: Error case - transform is not a function
   invalidSelection = agentLib.selectSkills {
     catalog = testCatalog;
@@ -207,6 +235,12 @@ ${original}
     inherit pkgs;
     selection = testSelectionUnbuildable;
     name = "agent-skills-test-unbuildable";
+  };
+
+  testBundleOverlap = agentLib.mkBundle {
+    inherit pkgs;
+    selection = testSelectionOverlap;
+    name = "agent-skills-test-overlap";
   };
 
   testBundleRewriteMultiBin = agentLib.mkBundle {
@@ -377,6 +411,15 @@ pkgs.runCommand "agent-skills-transform-packages-test" {} ''
   echo "evaluated ${builtins.unsafeDiscardStringContext testBundleUnbuildable.drvPath}"
 
   echo "Case 9 passed!"
+
+  echo ""
+  echo "=== Case 10: overlapping package names ==="
+  skillMd10="${testBundleOverlap}/test-skill-overlap/SKILL.md"
+
+  grep -q '^Run tool --help' "$skillMd10" || { echo "multi-binary tool should stay bare"; exit 1; }
+  grep -q '^Run \./tool-extra --version' "$skillMd10" || { echo "tool-extra not rewritten as one command"; exit 1; }
+
+  echo "Case 10 passed!"
 
   echo ""
   echo "All tests passed!"
