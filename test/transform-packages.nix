@@ -135,6 +135,22 @@ ${original}
     };
   };
 
+  # Case 9: packages are only inspected at build time. A package that cannot
+  # build must not stop the bundle from evaluating.
+  unbuildablePackage = pkgs.runCommand "unbuildable" { pname = "unbuildable"; } "exit 1";
+  testSelectionUnbuildable = agentLib.selectSkills {
+    catalog = rewriteCatalog;
+    allowlist = [];
+    sources = rewriteSources;
+    skills = {
+      test-skill-unbuildable = {
+        from = "rewrite-fixtures";
+        path = ".";
+        packages = [ unbuildablePackage ];
+      };
+    };
+  };
+
   # Case 5: Error case - transform is not a function
   invalidSelection = agentLib.selectSkills {
     catalog = testCatalog;
@@ -185,6 +201,12 @@ ${original}
     inherit pkgs;
     selection = testSelectionRewriteDisabled;
     name = "agent-skills-test-rewrite-disabled";
+  };
+
+  testBundleUnbuildable = agentLib.mkBundle {
+    inherit pkgs;
+    selection = testSelectionUnbuildable;
+    name = "agent-skills-test-unbuildable";
   };
 
   testBundleRewriteMultiBin = agentLib.mkBundle {
@@ -347,6 +369,14 @@ pkgs.runCommand "agent-skills-transform-packages-test" {} ''
   test -x "$skillDir8/bun/bunx" || { echo "bunx binary not found"; exit 1; }
 
   echo "Case 8 passed!"
+
+  echo ""
+  echo "=== Case 9: packages are not built during evaluation ==="
+  # Only the drvPath is referenced, with its context dropped, so this check
+  # neither builds the bundle nor its unbuildable package.
+  echo "evaluated ${builtins.unsafeDiscardStringContext testBundleUnbuildable.drvPath}"
+
+  echo "Case 9 passed!"
 
   echo ""
   echo "All tests passed!"

@@ -83,3 +83,6 @@ See the [source registry guide](./source-registry.md) and
 
 Additional bundle utilities (`getPkgBinInfo`, `mkPackagesTable`, and
 `rewriteCommandPaths`) are exported from [the library](../lib/default.nix).
+They read package outputs during evaluation, which is import from derivation
+and builds each package first. `mkBundle` does not use them: it inspects a
+skill's `packages` at build time instead.
