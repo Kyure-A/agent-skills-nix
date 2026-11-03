@@ -65,7 +65,7 @@ let
       systems = [ ];
     };
     antigravity = {
-      dest = "$HOME/.gemini/antigravity/skills";
+      dest = "$HOME/.gemini/config/skills";
       structure = "symlink-tree";
       enable = false;
       systems = [ ];
