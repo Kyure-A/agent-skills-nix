@@ -115,8 +115,8 @@ pkgs.runCommand "agent-skills-selection-test" { } ''
   cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/fixture/SKILL.md
   cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/renamed/skill/SKILL.md
   cmp ${./fixtures/test-skill/SKILL.md} ${bundle}/null-name/SKILL.md
-  test -f ${bundle.forTarget "codex"}/renamed/skill/SKILL.md
-  test ! -e ${bundle.forTarget "claude"}/renamed/skill
+  test -f ${bundle.forTarget { name = "codex"; }}/renamed/skill/SKILL.md
+  test ! -e ${bundle.forTarget { name = "claude"; }}/renamed/skill
   test ! -e ${bundle}/disabled
   mkdir -p "$out"
   touch "$out/ok"

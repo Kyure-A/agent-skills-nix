@@ -92,15 +92,63 @@ applications can discover the installed files.
 
 ## Target configuration
 
-Each target supports `enable`, `dest`, `structure`, and `systems`; an empty
-`systems` list allows every system. Built-in targets must be enabled explicitly.
-Custom targets require a destination.
+Each target supports `enable`, `dest`, `structure`, `flatten`, and `systems`;
+an empty `systems` list allows every system. Built-in targets must be enabled
+explicitly. Custom targets require a destination.
 
 | Structure | Behavior |
 |-----------|----------|
 | `link` | Links to the store bundle; Home Manager manages recursive `home.file` links |
 | `symlink-tree` | Synchronizes with `rsync -a --delete`, preserving symlinks |
 | `copy-tree` | Synchronizes with `rsync -aL --delete`, dereferencing symlinks |
+
+`flatten` defaults to `false` for built-in and custom targets, globally and
+locally. Enable it only for targets that need skills as immediate children:
+
+```nix
+programs.agent-skills.targets.agents = {
+  enable = true;
+  flatten = true;
+};
+```
+
+When using the library directly, extend the corresponding default target:
+
+```nix
+globalProgram = agentLib.mkSyncProgram {
+  inherit pkgs bundle;
+  targets.agents = agentLib.defaultTargets.agents // {
+    enable = true;
+    flatten = true;
+  };
+};
+localProgram = agentLib.mkLocalInstallProgram {
+  inherit pkgs bundle;
+  targets.agents = agentLib.defaultLocalTargets.agents // {
+    enable = true;
+    flatten = true;
+  };
+};
+```
+
+Flattening uses the last component of each final skill ID, including any
+explicit rename: `team/tools/writing` becomes `writing`, and
+`explicit/renamed` becomes `renamed`. Only that target's view changes; the full
+bundle and targets without flattening retain their nested paths. Skill
+contents are shared, not rewritten to adjust references between skills.
+
+Collisions are checked after per-skill target filtering. Two allowed IDs with
+the same basename fail evaluation with
+`agent-skills: flattened skill path collision at '<basename>': <id1> and <id2>`.
+Keep flattening disabled to preserve both namespaces, or select/rename the
+skills so the target has no collision. `flatten = true` requires a bundle
+created by `mkBundle`; plain paths and derivations without its metadata are
+rejected for active targets.
+
+This option controls a target's directory layout, not which applications can
+read it. All consumers of a shared directory see the same layout. Targets
+resolving to the same destination with different bundles or structures are
+rejected by preflight; enabling flattening does not isolate them.
 
 Global runtime destinations support `$HOME`, `~`, and fallback forms such as
 `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`. These are parsed as data, without
@@ -130,10 +178,12 @@ Destination overrides are separated by spaces, tabs, or newlines. For example,
 an unrestricted global program with overrides enabled accepts
 `AGENT_SKILLS_DESTS="~/tmp/skills1 ~/tmp/skills2"`.
 
-Local overrides retain each matched target's structure; remaining targets keep
-their configured destinations. Additional overrides use `overrideStructure`
-(`copy-tree` for `mkLocalInstallProgram`). Use configured targets for paths
-containing whitespace or for bundles with `agents` restrictions.
+Local overrides retain each matched target's structure and target bundle view;
+remaining targets keep their configured destinations. Additional local
+overrides use the full bundle and `overrideStructure` (`copy-tree` for
+`mkLocalInstallProgram`). Global overrides use the full bundle rather than a
+named target's flattened view. Use configured targets for paths containing
+whitespace or for bundles with `agents` restrictions.
 
 ## Destination ownership
 
