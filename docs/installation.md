@@ -83,7 +83,7 @@ disabled by default; global targets use `symlink-tree` and local targets use
 | copilot | `$HOME/.copilot/skills` | `.github/skills` |
 | cursor | `$HOME/.cursor/skills` | `.cursor/skills` |
 | windsurf | `$HOME/.codeium/windsurf/skills` | `.windsurf/skills` |
-| antigravity | `$HOME/.gemini/antigravity/skills` | `.agents/skills` |
+| antigravity | `$HOME/.gemini/config/skills` | `.agents/skills` |
 | gemini | `$HOME/.gemini/skills` | `.gemini/skills` |
 | pi | `$HOME/.pi/agent/skills` | `.pi/skills` |
 
