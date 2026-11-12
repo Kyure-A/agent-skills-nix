@@ -99,6 +99,65 @@ let
       in
       fixed;
 
+  # Packages listed by a skill are only realised at build time, so anything
+  # that depends on their bin/ layout (links, the dependencies table, command
+  # rewriting) must be decided there too. Inspecting them during evaluation
+  # would be import-from-derivation and build every package mid-eval.
+  # Evaluation leaves these placeholders, which the build script resolves.
+  dependenciesPlaceholder = "@agent-skills-dependencies@";
+  commandPlaceholder = i: "@agent-skills-command-${toString i}@";
+  prefixedCommandPlaceholder = i: "@agent-skills-prefixed-command-${toString i}@";
+
+  # Mirrors getPkgBinInfo, mkPackagesTable and rewriteCommandPaths, but runs
+  # at build time. Expects $out/$dest/SKILL.md to exist and appends this
+  # package's row to $dependencies.
+  mkPackageCommands = i: pkg:
+    let
+      validPackage =
+        if lib.isDerivation pkg then true
+        else throw "agent-skills: packages entries must be derivations, got ${builtins.typeOf pkg}";
+      name = pkg.pname or pkg.name or "unknown";
+      pkgPath = lib.escapeShellArg "${pkg}";
+      binDir = lib.escapeShellArg "${pkg}/bin";
+      escapedName = lib.escapeShellArg name;
+    in
+    assert validPackage;
+    ''
+      bins=()
+      if [ -d ${binDir} ]; then
+        while IFS= read -r bin; do bins+=("$bin"); done < <(LC_ALL=C ls -A ${binDir})
+      fi
+      if [ -e ${binDir}/${escapedName} ] && [ "''${#bins[@]}" -eq 1 ]; then
+        target=${binDir}/${escapedName}
+        isDir=
+      elif [ -d ${binDir} ]; then
+        target=${binDir}
+        isDir=1
+      else
+        target=${pkgPath}
+        isDir=
+      fi
+      ln -s "$target" "$out/$dest/"${escapedName}
+
+      if [ -n "$isDir" ]; then
+        note=
+        if [ "''${#bins[@]}" -gt 1 ]; then
+          shown=("''${bins[@]:0:5}")
+          note=" (contains: $(IFS=,; echo "''${shown[*]}" | sed 's/,/, /g')"
+          if [ "''${#bins[@]}" -gt 5 ]; then note="$note, ..."; fi
+          note="$note)"
+        fi
+        dependencies+=$'\n'"| "${escapedName}" | \`./"${escapedName}"/\`$note |"
+        command=${escapedName}
+      else
+        dependencies+=$'\n'"| "${escapedName}" | \`./"${escapedName}"\` |"
+        command=./${escapedName}
+      fi
+      substituteInPlace "$out/$dest/SKILL.md" \
+        --replace-quiet ${lib.escapeShellArg (commandPlaceholder i)} "$command" \
+        --replace-quiet ${lib.escapeShellArg (prefixedCommandPlaceholder i)} ./${escapedName}
+    '';
+
   # Materialize bundle in the store, preserving nested paths.
   mkBundle = { pkgs, selection, name ? "agent-skills-bundle" }:
     let
@@ -184,12 +243,29 @@ let
             '';
 
             originalContent = readFile "${skillPath}/SKILL.md";
-            packagesTable = mkPackagesTable (skill.packages or [ ]);
+            packages = skill.packages or [ ];
+            packagesTable = if hasPackages then dependenciesPlaceholder else "";
 
-            # Optionally rewrite single-binary command names to ./command paths.
+            # Optionally rewrite package command names to ./command paths. Every
+            # package name becomes a placeholder here; the build step turns it
+            # back into the bare name for multi-binary packages. Already
+            # prefixed names get their own placeholder so they never end up as
+            # ././command. Which packages are single-binary is unknown until
+            # build time, so overlapping names match longest first: `git-lfs`
+            # stays one command even beside a `git` package.
             hasRewrite = (if skill ? rewriteCommands then skill.rewriteCommands else true) && hasPackages;
+            replacements = builtins.sort (a: b: builtins.stringLength a.from > builtins.stringLength b.from)
+              (concatMap
+                (i:
+                  let name = (builtins.elemAt packages i).pname or (builtins.elemAt packages i).name or "unknown";
+                  in [
+                    { from = "./${name}"; to = prefixedCommandPlaceholder i; }
+                    { from = name; to = commandPlaceholder i; }
+                  ])
+                (lib.range 0 (builtins.length packages - 1)));
             rewrittenContent =
-              if hasRewrite then rewriteCommandPaths originalContent (skill.packages or [ ])
+              if hasRewrite then
+                builtins.replaceStrings (map (r: r.from) replacements) (map (r: r.to) replacements) originalContent
               else originalContent;
 
             # Apply transform function or use default (original + dependencies at end)
@@ -202,13 +278,7 @@ let
           in
           if needsCustomisation then
             let
-              # Generate symlink commands for packages
-              pkgLinks = concatMapStringsSep "\n"
-                (pkg:
-                  let info = getPkgBinInfo pkg;
-                  in ''ln -s "${info.path}" "$out/$dest/${info.name}"''
-                )
-                (skill.packages or [ ]);
+              pkgCommands = lib.concatStringsSep "\n" (lib.imap0 mkPackageCommands packages);
             in
             ''
                         ${validateSkillPath}
@@ -221,12 +291,18 @@ let
                             ln -s "$f" "$out/$dest/$fname"
                           fi
                         done
-                        # Link package binaries
-                        ${pkgLinks}
                         # Create transformed SKILL.md
                         cat > "$out/$dest/SKILL.md" <<'SKILL_EOF'
               ${transformedContent}
               SKILL_EOF
+                        # Link package binaries and resolve their placeholders
+                        dependencies=
+                        ${pkgCommands}
+                        ${lib.optionalString hasPackages ''
+                          substituteInPlace "$out/$dest/SKILL.md" \
+                            --replace-quiet ${lib.escapeShellArg dependenciesPlaceholder} \
+                            "## Dependencies"$'\n\n'"| Package | Path |"$'\n'"|---------|------|$dependencies"$'\n\n'
+                        ''}
             '' else ''
             ${validateSkillPath}
             dest=${lib.escapeShellArg skill.id}

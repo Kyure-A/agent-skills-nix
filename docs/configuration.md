@@ -171,8 +171,17 @@ A transform receives:
 
 | Argument | Value |
 |----------|-------|
-| `original` | The `SKILL.md` content, after any command rewriting |
-| `dependencies` | A Markdown table of package dependencies with local paths |
+| `original` | The `SKILL.md` content, with command names marked for rewriting |
+| `dependencies` | A placeholder for the Markdown table of package dependencies with local paths |
+
+Whether a package has one binary or several is only known once it is built, so
+evaluation never reads package outputs. Package names in `original` and the
+`dependencies` table are left as `@agent-skills-…@` placeholders, which the
+bundle build resolves in the transform's output. Keep them intact: a transform
+that replaces a package's command name in `original` will not find it, so set
+`rewriteCommands = false;` when the transform rewrites those commands itself.
+When package names overlap, such as `git` and `git-lfs`, the longest match is
+rewritten.
 
 With packages but no transform, the dependency table is appended after the
 content (including any command rewriting). With neither, the original
