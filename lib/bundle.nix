@@ -320,12 +320,21 @@ let
       '';
     in
     result;
+
+  mkSubagentBundle = { pkgs, subagents, name ? "agent-skills-subagents" }:
+    pkgs.runCommand name { preferLocalBuild = true; } ''
+      mkdir -p "$out"
+      ${concatMapStringsSep "\n"
+        (agent: "cp ${lib.escapeShellArg (builtins.path { path = agent.absPath; name = "agent-skills-subagent"; })} \"$out\"/${lib.escapeShellArg "${agent.id}.md"}")
+        (builtins.attrValues subagents)}
+    '';
 in
 {
   inherit
     getPkgBinInfo
     mkBundle
     mkPackagesTable
+    mkSubagentBundle
     rewriteCommandPaths
     ;
 }

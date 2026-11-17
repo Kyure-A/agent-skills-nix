@@ -127,6 +127,39 @@ let
     in
     lib.attrsets.foldlAttrs addSource { } (normalizeSources sources);
 
+  discoverSubagentsIn = name: cfg:
+    let
+      root = resolveSourceRoot name cfg;
+      dir = if cfg.subagentsSubdir == "." then root else root + "/${cfg.subagentsSubdir}";
+      entries =
+        if pathExists dir then readDir dir
+        else throw "agent-skills: source ${name} subagentsSubdir ${toString dir} does not exist";
+      nonSymlinkMarkdownFiles = lib.filterAttrs
+        (file: type: type == "regular" && match ".+\\.md" file != null)
+        entries;
+    in
+    lib.mapAttrs'
+      (file: _:
+        let id = lib.removeSuffix ".md" file;
+        in lib.nameValuePair id { inherit id; source = name; absPath = dir + "/${file}"; })
+      nonSymlinkMarkdownFiles;
+
+  discoverSubagents = sources:
+    let
+      addSource = acc: name: cfg:
+        if cfg.subagentsSubdir == null then acc
+        else
+          lib.attrsets.foldlAttrs
+            (inner: id: agent:
+              if inner ? ${id} then
+                throw "agent-skills: duplicate subagent id '${id}' found in source '${agent.source}' (${toString agent.absPath}) and source '${inner.${id}.source}' (${toString inner.${id}.absPath})"
+              else inner // { ${id} = agent; }
+            )
+            acc
+            (discoverSubagentsIn name cfg);
+    in
+    lib.attrsets.foldlAttrs addSource { } (normalizeSources sources);
+
   # Render catalog in a stable, JSON-friendly form.
   catalogJson = catalog:
     lib.mapAttrs
@@ -146,6 +179,7 @@ in
     assertSkillId
     catalogJson
     discoverCatalog
+    discoverSubagents
     normalizeSources
     resolveSourceRoot
     sourcePathFor

@@ -17,6 +17,7 @@ in
   inherit (sources)
     catalogJson
     discoverCatalog
+    discoverSubagents
     ;
   inherit (selection)
     allowlistFor
@@ -26,6 +27,7 @@ in
     getPkgBinInfo
     mkBundle
     mkPackagesTable
+    mkSubagentBundle
     rewriteCommandPaths
     ;
   inherit (agentPlugin)
