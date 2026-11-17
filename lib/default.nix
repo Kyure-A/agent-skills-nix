@@ -43,6 +43,7 @@ in
     mkShellHook
     mkSyncProgram
     mkSyncScript
+    subagentEntriesFor
     targetsFor
     ;
 }
