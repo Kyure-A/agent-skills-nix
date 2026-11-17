@@ -64,7 +64,7 @@ in
               # e.g., "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -> ".claude/skills"
                 let
                   # Extract the fallback part after :- and before }
-                  fallbackMatch = builtins.match ".*:-\\$HOME/([^}]+)\\}(.*)" dest;
+                  fallbackMatch = builtins.match ".*:-\\$HOME/([^}]+)[}](.*)" dest;
                 in
                 if fallbackMatch != null then
                   builtins.trace "agent-skills: 'link' structure does not support shell variables, using fallback path"
