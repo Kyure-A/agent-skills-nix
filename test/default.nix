@@ -47,6 +47,10 @@
     inherit pkgs agentLib;
   };
 
+  subagent-runtime = import ./subagent-runtime.nix {
+    inherit pkgs agentLib;
+  };
+
   local-install-script = import ./local-install-script.nix {
     inherit pkgs agentLib;
   };
