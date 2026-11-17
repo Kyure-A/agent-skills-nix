@@ -28,6 +28,11 @@ let
       cfg.targets;
     system = pkgs.stdenv.hostPlatform.system;
     excludePatterns = cfg.excludePatterns;
+    extraEntries = lib.optionals (cfg.subagentsBundlePath != null) (agentLib.subagentEntriesFor {
+      bundle = cfg.subagentsBundlePath;
+      targets = syncTargets;
+      system = pkgs.stdenv.hostPlatform.system;
+    });
   };
 
   # home.file does not shell-expand its paths.
@@ -43,6 +48,8 @@ let
         throw "agent-skills: 'link' structure requires a static path, got '${dest}'. Use 'symlink-tree' or 'copy-tree' for dynamic paths."
     else
       dest;
+
+  subagentLinkTargets = lib.filterAttrs (_: t: t.subagentsDest != null) linkTargets;
 in
 {
   imports = [ (import ../common.nix { inherit inputs lib; }) ];
@@ -69,7 +76,16 @@ in
             force = true;
           };
         })
-        linkTargets);
+        linkTargets
+      # Without force, Home Manager refuses to replace a user's own agent file.
+      ++ lib.optionals (cfg.subagentsBundlePath != null) (lib.mapAttrsToList
+        (_: t: {
+          ${staticDestFor t.subagentsDest} = {
+            source = cfg.subagentsBundlePath;
+            recursive = true;
+          };
+        })
+        subagentLinkTargets));
     }
   );
 }
