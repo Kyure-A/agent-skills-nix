@@ -34,6 +34,7 @@ produces path-backed sources and can be mixed with direct declarations.
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `subdir` | `"."` | Relative skill root inside the input or path |
+| `subagentsSubdir` | `null` | Relative directory of [subagent files](#installing-subagents) inside the input or path |
 | `idPrefix` | `null` | Namespace prepended to discovered skill IDs |
 | `filter.maxDepth` | `null` | Discovery depth: `0` scans only the root, `1` includes immediate children, `2` includes one further level |
 | `filter.nameRegex` | `null` | Regex matched against the skill's relative path, such as `cat-a/skill-1` |
@@ -146,6 +147,61 @@ non-null `agents` list, `AGENT_SKILLS_DESTS` and `AGENT_SKILLS_LOCAL_DESTS`
 overrides are rejected because those paths do not identify a target. Configure
 `targets.<name>.dest` instead. [Plugin exports](./agent-plugin.md) use their
 explicit export map rather than these restrictions.
+
+## Installing subagents
+
+Subagent definitions are single Markdown files, such as the files Claude Code
+reads from `~/.claude/agents`. Point a source at the directory holding them
+with `subagentsSubdir`, then select them by file name without `.md`:
+
+```nix
+programs.agent-skills = {
+  sources.cursor-plugins = {
+    input = "cursor-plugins";
+    subdir = "pstack/skills";
+    subagentsSubdir = "pstack/agents";
+  };
+
+  skills.enableAll = [ "cursor-plugins" ];
+  subagents.enable = [ "comment-sicko" ];
+  targets.claude.enable = true;
+};
+```
+
+`subagentsSubdir` is relative to the source root, not to `subdir`. Discovery
+reads only the top level of that directory and takes regular `*.md` files.
+Subdirectories, other files, and symlinks are ignored. `idPrefix` does not
+apply, and the same ID in two sources fails evaluation. `subagents.enable` and
+`subagents.enableAll` work like their `skills` counterparts. Nothing is
+installed until a subagent is selected.
+
+Selected files go to every enabled target with a `subagentsDest`. `claude`
+defaults to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents` and `cursor` to
+`$HOME/.cursor/agents`. Other built-in targets use different agent formats and
+have no default. Set `targets.<name>.subagentsDest` to add a destination, or
+`null` to skip one. Subagents use the target's `structure`, and per-skill
+`agents` lists do not apply to them. A `dest` that contains the
+`subagentsDest`, such as `$HOME/.claude`, is rejected as an overlap. Only the
+Home Manager module installs subagents; local install programs and shell hooks
+do not.
+
+With `symlink-tree` or `copy-tree`, the agents directory is a managed
+destination. An existing non-empty directory without the ownership marker
+stops activation, and nothing is changed, until you take it over (see
+[destination ownership](./installation.md#destination-ownership)). To keep
+agents you wrote yourself:
+
+- Move them into a source, such as
+  `sources.my-agents = { path = ./agents; subagentsSubdir = "."; };`, and
+  select them.
+- Or set the target's `structure = "link";`. Home Manager then links each
+  selected file into the directory and leaves other files alone. A file with
+  the same name as a selected subagent stops activation instead of being
+  replaced. The structure applies to the target's skills too.
+
+A one-time `AGENT_SKILLS_FORCE=1` with an `excludePatterns` entry such as
+`"/my-agent.md"` also keeps that file, because synchronization does not delete
+excluded files. `excludePatterns` applies to skill destinations as well.
 
 ## Transforming content and bundling dependencies
 

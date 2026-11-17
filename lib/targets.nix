@@ -42,6 +42,7 @@ let
     };
     claude = {
       dest = "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills";
+      subagentsDest = "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents";
       structure = "symlink-tree";
       enable = false;
       systems = [ ];
@@ -54,6 +55,7 @@ let
     };
     cursor = {
       dest = "$HOME/.cursor/skills";
+      subagentsDest = "$HOME/.cursor/agents";
       structure = "symlink-tree";
       enable = false;
       systems = [ ];
@@ -121,6 +123,16 @@ let
       (name: _: if hasBundleMetadata && bundle ? forTarget then bundle.forTarget name else bundle)
       (targetsFor { inherit targets system; });
 
+  subagentEntriesFor = { bundle, targets, system }:
+    lib.mapAttrsToList
+      (name: target: {
+        name = "${name}:subagents";
+        bundle = "${bundle}";
+        structure = target.structure or "symlink-tree";
+        dest = target.subagentsDest;
+      })
+      (filterAttrs (_: t: (t.subagentsDest or null) != null) (targetsFor { inherit targets system; }));
+
   # Build an executable that delegates synchronization to the shared runtime.
   # Nix is responsible only for filtering targets and serializing configuration;
   # destination expansion and filesystem safety checks happen at runtime.
@@ -135,6 +147,7 @@ let
     , overrideEnvVar ? (if mode == "local" then "AGENT_SKILLS_LOCAL_DESTS" else "AGENT_SKILLS_DESTS")
     , overrideStructure ? (if mode == "local" then "copy-tree" else "symlink-tree")
     , excludePatterns ? defaultExcludePatterns
+    , extraEntries ? [ ]
     ,
     }:
     let
@@ -152,7 +165,8 @@ let
             structure = target.structure or (if mode == "local" then "copy-tree" else "symlink-tree");
             dest = target.dest;
           })
-          activeTargets;
+          activeTargets
+        ++ extraEntries;
         overrides = {
           enabled = allowOverrides;
           envVar = overrideEnvVar;
@@ -232,6 +246,7 @@ in
     mkShellHook
     mkSyncProgram
     mkSyncScript
+    subagentEntriesFor
     targetsFor
     ;
 }

@@ -27,6 +27,7 @@
           home-manager-warnings = import ./home-manager-warnings.nix args;
           home-manager-input-source = import ./home-manager-input-source.nix args;
           home-manager-skill-targets = import ./home-manager-skill-targets.nix args;
+          home-manager-subagents = import ./home-manager-subagents.nix args;
         });
     };
 }

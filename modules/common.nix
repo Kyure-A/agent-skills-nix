@@ -39,6 +39,16 @@ let
         '';
       };
 
+      subagentsDest = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = agentLib.defaultTargets.${name}.subagentsDest or null;
+        description = ''
+          Destination for subagent files; supports the same path forms as `dest`.
+          Null installs no subagents to this target.
+        '';
+        example = "$HOME/.claude/agents";
+      };
+
       structure = lib.mkOption {
         type = lib.types.enum [ "link" "symlink-tree" "copy-tree" ];
         default = "symlink-tree";
@@ -77,6 +87,13 @@ let
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Optional prefix to prepend to discovered skill IDs (for example, `openai` -> `openai/pdf`).";
+      };
+
+      subagentsSubdir = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Directory under the input/path holding subagent `*.md` files. Null provides no subagents.";
+        example = "agents";
       };
 
       filter = {
@@ -194,6 +211,27 @@ in
       description = "Skill selection (allowlist + explicit).";
     };
 
+    subagents = lib.mkOption {
+      type = lib.types.submodule ({ ... }: {
+        options = {
+          enable = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = "Subagent IDs (file names without `.md`) to install.";
+            example = [ "comment-sicko" ];
+          };
+
+          enableAll = lib.mkOption {
+            type = lib.types.either lib.types.bool (lib.types.listOf lib.types.str);
+            default = false;
+            description = "Install all discovered subagents; set true for all sources or a list of source names.";
+          };
+        };
+      });
+      default = { };
+      description = "Subagent definition selection.";
+    };
+
     targets = lib.mkOption {
       type = lib.types.attrsOf targetType;
       default = { };
@@ -226,6 +264,12 @@ in
       readOnly = true;
       description = "Store bundles filtered by skill agents allowlists, keyed by enabled target names for the current system.";
     };
+
+    subagentsBundlePath = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      readOnly = true;
+      description = "Store directory of selected subagent files; null when none are selected.";
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -243,10 +287,20 @@ in
         sources = cfg.sources;
       };
       bundle = agentLib.mkBundle { inherit pkgs selection; };
+      subagentCatalog = agentLib.discoverSubagents cfg.sources;
+      subagentIds = agentLib.allowlistFor {
+        catalog = subagentCatalog;
+        sources = cfg.sources;
+        inherit (cfg.subagents) enable enableAll;
+        context = "subagents";
+      };
     in
     {
       programs.agent-skills.catalog = catalog;
       programs.agent-skills.bundlePath = bundle;
+      programs.agent-skills.subagentsBundlePath =
+        if subagentIds == [ ] then null
+        else agentLib.mkSubagentBundle { inherit pkgs; subagents = lib.getAttrs subagentIds subagentCatalog; };
       programs.agent-skills.targetBundlePaths = agentLib.bundlesForTargets {
         bundle = cfg.bundlePath;
         targets = cfg.targets;

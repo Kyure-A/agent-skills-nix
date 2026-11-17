@@ -55,12 +55,17 @@ let
   normalizeSourceConfig = name: value:
     let
       context = "source ${name}";
-      cfg = assertOnlyKeys context [ "input" "path" "subdir" "idPrefix" "filter" ] value;
+      cfg = assertOnlyKeys context [ "input" "path" "subdir" "idPrefix" "filter" "subagentsSubdir" ] value;
       rawPath = cfg.path or null;
       path = if builtins.isAttrs rawPath && rawPath ? outPath then rawPath.outPath else rawPath;
       input = optionalString "${context}.input" (cfg.input or null);
-      discovery = normalizeDiscoveryConfig context (builtins.removeAttrs cfg [ "input" "path" ]);
-      normalized = discovery // { inherit input path; };
+      rawSubagentsSubdir = cfg.subagentsSubdir or null;
+      subagentsSubdir =
+        if rawSubagentsSubdir == null then null
+        else if assertSafeRelPath "${context}.subagentsSubdir" rawSubagentsSubdir == "" then "."
+        else rawSubagentsSubdir;
+      discovery = normalizeDiscoveryConfig context (builtins.removeAttrs cfg [ "input" "path" "subagentsSubdir" ]);
+      normalized = discovery // { inherit input path subagentsSubdir; };
     in
     if path != null && !(builtins.isPath path || (builtins.isString path && lib.hasPrefix "/" path)) then
       fail "${context}.path must be an absolute path or an input with outPath"

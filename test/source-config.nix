@@ -13,6 +13,7 @@ let
     relative-root = { path = "relative/path"; };
     invalid-input = { input = [ "fixture" ]; };
     unsafe-subdir = { subdir = "../outside"; };
+    unsafe-subagents-subdir = { subagentsSubdir = "../outside"; };
     invalid-subdir-type = { subdir = null; };
     empty-prefix = { idPrefix = ""; };
     trailing-prefix = { idPrefix = "fixture/"; };
@@ -38,7 +39,7 @@ let
   registrySettings = builtins.removeAttrs manifests.alpha [ "pin" ];
   directSettings = builtins.removeAttrs
     (sourceConfig.normalizeSourceConfig "alpha"
-      (registrySettings // { path = fixture; })) [ "input" "path" ];
+      (registrySettings // { path = fixture; })) [ "input" "path" "subagentsSubdir" ];
   depthZero = agentLib.discoverCatalog {
     fixture = { path = fixture; filter.maxDepth = 0; };
     nested = { path = ./fixtures/nested-skills; filter.maxDepth = 0; };

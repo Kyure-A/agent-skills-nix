@@ -34,25 +34,25 @@ let
     if isAttrs value then value
     else throw "agent-skills: ${context} must be an attribute set";
 
-  normalizeIds = context: ids:
+  normalizeIds = kind: context: ids:
     if !isList ids then
-      throw "agent-skills: ${context} must be a list of skill IDs"
+      throw "agent-skills: ${context} must be a list of ${lib.removeSuffix "s" kind} IDs"
     else
       let checked = map assertSkillId ids;
       in builtins.deepSeq checked (lib.unique checked);
 
   # Resolve and validate IDs before returning the list, even if its caller only
   # inspects its length. Validation must not live in unused lazy bindings.
-  catalogIds = context: catalog: ids:
+  catalogIds = kind: context: catalog: ids:
     let
-      checked = normalizeIds context ids;
+      checked = normalizeIds kind context ids;
       unknown = filter (id: !(hasAttr id catalog)) checked;
     in
     if unknown != [ ] then
-      throw "agent-skills: ${context} refers to unknown skills: ${lib.concatStringsSep ", " unknown}"
+      throw "agent-skills: ${context} refers to unknown ${kind}: ${lib.concatStringsSep ", " unknown}"
     else checked;
 
-  allowlistFor = { catalog, sources, enableAll ? false, enable ? [ ] }:
+  allowlistFor = { catalog, sources, enableAll ? false, enable ? [ ], context ? "skills" }:
     let
       sourceConfigs = normalizeSources sources;
       checkedCatalog = assertAttrs "catalog" catalog;
@@ -62,9 +62,9 @@ let
           let unknown = filter (name: !(hasAttr name sourceConfigs)) enableAll;
           in
           if unknown != [ ] then
-            throw "agent-skills: skills.enableAll refers to unknown sources: ${lib.concatStringsSep ", " unknown}"
+            throw "agent-skills: ${context}.enableAll refers to unknown sources: ${lib.concatStringsSep ", " unknown}"
           else lib.unique enableAll
-        else throw "agent-skills: skills.enableAll must be a boolean or a list of source names";
+        else throw "agent-skills: ${context}.enableAll must be a boolean or a list of source names";
       sourceAllowlist = lib.concatMap
         (sourceName:
           attrNames (lib.filterAttrs (_: skill: skill.source == sourceName) checkedCatalog)
@@ -73,10 +73,10 @@ let
       selected =
         (if isBool enableAll && enableAll then attrNames checkedCatalog else [ ])
         ++ sourceAllowlist
-        ++ normalizeIds "skills.enable" enable;
+        ++ normalizeIds context "${context}.enable" enable;
     in
     builtins.seq sourceConfigs (
-      builtins.seq checkedCatalog (catalogIds "skills.enable" checkedCatalog selected)
+      builtins.seq checkedCatalog (catalogIds context "${context}.enable" checkedCatalog selected)
     );
 
   # Disabled declarations need no source, but their enable flag must still be
@@ -147,7 +147,7 @@ let
       sourceConfigs = normalizeSources sources;
       checkedCatalog = assertAttrs "catalog" catalog;
       checkedSkills = assertAttrs "skills" skills;
-      ids = catalogIds "allowlist" checkedCatalog allowlist;
+      ids = catalogIds "skills" "allowlist" checkedCatalog allowlist;
       allowlisted = map
         (id:
           let skill = assertAttrs "catalog skill ${id}" checkedCatalog.${id};
