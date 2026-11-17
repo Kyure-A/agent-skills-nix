@@ -17,7 +17,8 @@ selected skills to enabled targets:
 
 Home Manager exposes the full bundle as `programs.agent-skills.bundlePath` and
 the filtered bundles for enabled targets on the current system as
-`programs.agent-skills.targetBundlePaths`.
+`programs.agent-skills.targetBundlePaths`. Selected subagents are in
+`programs.agent-skills.subagentsBundlePath`.
 
 ## Project-local installation
 
@@ -90,9 +91,18 @@ disabled by default; global targets use `symlink-tree` and local targets use
 Per-skill `agents` lists select installation targets; they do not control which
 applications can discover the installed files.
 
+[Subagent files](./configuration.md#installing-subagents) have their own
+global destination per target. Only targets that read plain Markdown agent
+files have a default:
+
+| Target | Global subagents path |
+|--------|-----------------------|
+| claude | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents` |
+| cursor | `$HOME/.cursor/agents` |
+
 ## Target configuration
 
-Each target supports `enable`, `dest`, `structure`, and `systems`; an empty
+Each target supports `enable`, `dest`, `subagentsDest`, `structure`, and `systems`; an empty
 `systems` list allows every system. Built-in targets must be enabled explicitly.
 Custom targets require a destination.
 

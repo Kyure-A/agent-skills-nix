@@ -3,7 +3,9 @@
 Manage Agent Skills (directories containing `SKILL.md`) declaratively with Nix.
 Pin skill sources, select the skills you need, and install them through Home
 Manager or project-local commands. You can also export selected skills as a
-self-contained Agent Plugin.
+self-contained Agent Plugin. Subagent definitions, single Markdown files such
+as `~/.claude/agents/<name>.md`, install the same way through Home Manager; see
+[installing subagents](./docs/configuration.md#installing-subagents).
 
 Nothing is installed by default: choose both skills and targets explicitly.
 

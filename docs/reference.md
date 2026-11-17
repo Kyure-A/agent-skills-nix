@@ -39,6 +39,8 @@ discovery → selection → bundle pipeline with caller-provided `inputs`,
 | `selectSkills { catalog; sources; allowlist; skills; }` | Combines catalog entries with explicit skill declarations |
 | `mkBundle { pkgs; selection; }` | Builds the full selection in the Nix store |
 | `catalogJson catalog` | Produces a JSON-ready catalog view |
+| `discoverSubagents sources` | Discovers top-level `*.md` files under each source's `subagentsSubdir` |
+| `mkSubagentBundle { pkgs; subagents; }` | Copies selected subagent files to `<id>.md` in a flat store directory |
 
 Home Manager maps `skills.enable` and `skills.enableAll` through `allowlistFor`,
 then passes the result as `allowlist` and `skills.explicit` as `skills` to
@@ -49,6 +51,12 @@ selection validation, renaming, and customisation.
 skill's `agents` list. Pass the bundle derivation directly to the install
 helpers to retain this metadata. A plain store path does not carry it.
 
+Subagents use the same `allowlistFor` with `context = "subagents"`, which
+makes its errors name `subagents.enable` and `subagents.enableAll`. Home
+Manager exposes the result of `mkSubagentBundle` as
+`programs.agent-skills.subagentsBundlePath`, or `null` when nothing is
+selected.
+
 ## Targets and install programs
 
 | Helper or value | Purpose |
@@ -57,7 +65,8 @@ helpers to retain this metadata. A plain store path does not carry it.
 | `defaultExcludePatterns` | Synchronization exclusions; defaults to `[ "/.system" ]` |
 | `targetsFor { targets; system; }` | Filters targets by `enable` and `systems` |
 | `bundlesForTargets { bundle; targets; system; }` | Validates skill target names and returns filtered bundles for enabled targets |
-| `mkSyncProgram { pkgs; bundle; targets; ... }` | Builds a `skills-install` executable for global synchronization |
+| `mkSyncProgram { pkgs; bundle; targets; ... }` | Builds a `skills-install` executable for global synchronization; `extraEntries` appends sync entries |
+| `subagentEntriesFor { bundle; targets; system; }` | Returns one `<target>:subagents` sync entry per enabled target with a `subagentsDest` |
 | `mkLocalInstallProgram { pkgs; bundle; targets; ... }` | Builds a `skills-install-local` executable for project-local synchronization |
 | `mkShellHook { pkgs; bundle; targets; ... }` | Runs the local install program on shell entry; accepts `quiet = true;` |
 
@@ -65,6 +74,22 @@ The program helpers serialize a versioned JSON configuration and invoke the
 shared synchronization runtime. They return executable derivations, not inline
 shell source. `mkSyncScript` is a wrapper returning shell text that invokes the
 global program; `mkLocalInstallScript` returns the local program derivation.
+
+To install subagents from your own program, pass their entries to
+`mkSyncProgram`:
+
+```nix
+agentLib.mkSyncProgram {
+  inherit pkgs bundle targets;
+  extraEntries = agentLib.subagentEntriesFor {
+    inherit targets system;
+    bundle = agentLib.mkSubagentBundle {
+      inherit pkgs;
+      subagents = lib.getAttrs [ "comment-sicko" ] (agentLib.discoverSubagents sources);
+    };
+  };
+}
+```
 
 See [installation](./installation.md) for structures, runtime path expansion,
 destination overrides, and ownership checks.
