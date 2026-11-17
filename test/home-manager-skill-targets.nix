@@ -63,6 +63,9 @@ let
       targets.claude = { enable = true; dest = ".claude/skills"; structure = "link"; };
     };
   }).config.home.file.".claude/skills".source;
+  defaultLinkFiles = (mkConfig {
+    programs.agent-skills.targets.claude = { enable = true; structure = "link"; };
+  }).config.home.file;
   evaluationSucceeds = value: (builtins.tryEval (builtins.deepSeq value true)).success;
   expect = condition: message:
     if condition then true else throw "agent-skills Home Manager skill-targets test: ${message}";
@@ -90,6 +93,7 @@ assert expect (noTargets.targetBundlePaths == { }) "disabled targets must not cr
 assert expect (!evaluationSucceeds invalidConfig) "the module must reject a non-list agents value";
 assert expect (!evaluationSucceeds (toString unknownTargetSource)) "link-only configurations must reject unknown target names";
 assert expect (lib.hasInfix "/bin/skills-install" activation) "mixed layouts must retain sync activation";
+assert expect (defaultLinkFiles ? ".claude/skills") "link layout must resolve the default claude dest to its $HOME fallback";
 pkgs.runCommand "agent-skills-home-manager-skill-targets-test" { } ''
   set -euo pipefail
   fail() { echo "ERROR: $*" >&2; exit 1; }
